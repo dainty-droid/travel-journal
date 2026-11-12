@@ -149,6 +149,34 @@
   .exp-form-btns { display: flex; gap: 8px; }
   .exp-form-btns button { flex: 1; }
   .exp-del-link { display: block; margin: 8px auto 0; background: none; border: none; color: var(--warn); font-size: 0.8em; }
+  .amt-preview { font-size: 0.75em; color: var(--muted); margin: -6px 0 8px; text-align: right; }
+
+  /* 경비 탭 */
+  .ey-row { margin-bottom: 12px; }
+  .ey-row:last-child { margin-bottom: 0; }
+  .ey-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.9em; margin-bottom: 4px; }
+  .ey-head b { font-size: 1.05em; }
+  .ey-head span { color: var(--muted); font-size: 0.85em; }
+  .ey-head span.over { color: var(--warn); font-weight: 700; }
+  .ey-bar-wrap { background: var(--card2); border-radius: 6px; height: 14px; overflow: hidden; }
+  .ey-bar { height: 100%; background: var(--ok); border-radius: 6px; min-width: 3px; }
+  .ey-bar.warn { background: #f4b942; }
+  .ey-bar.over { background: var(--warn); }
+  .et-row {
+    display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 10px;
+    background: var(--card2); margin-bottom: 6px; cursor: pointer; font-size: 0.85em;
+  }
+  .et-main { flex: 1; min-width: 0; }
+  .et-place { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .et-sub { color: var(--muted); font-size: 0.85em; margin-top: 2px; }
+  .et-amt { text-align: right; white-space: nowrap; }
+  .et-amt b { display: block; font-size: 1.05em; }
+  .et-amt span { color: var(--muted); font-size: 0.85em; }
+  .exp-tag { display: inline-block; font-size: 0.72em; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-left: 4px; vertical-align: middle; }
+  .exp-tag.none { background: #3a1c1e; color: #ff9898; }
+  .exp-tag.flightonly { background: #3a311c; color: #ffd98a; }
+  .trip-card.flash { box-shadow: inset 0 0 0 2px var(--accent); }
+
   .sum-line { font-size: 0.8em; color: var(--muted); margin: -4px 0 12px; }
   .sum-line b { color: var(--text); }
   .year-title small { font-size: 0.65em; color: var(--muted); font-weight: 600; margin-left: 6px; }
@@ -257,6 +285,7 @@
     <button class="tab-btn active" data-tab="write" type="button">기록</button>
     <button class="tab-btn" data-tab="bytrip" type="button">여행별</button>
     <button class="tab-btn" data-tab="byyear" type="button">연도별</button>
+    <button class="tab-btn" data-tab="expense" type="button">경비</button>
   </div>
 </header>
 
@@ -362,6 +391,22 @@
     <button type="button" class="trash-btn" data-select="trips" title="여행 삭제">🗑</button>
   </div>
   <div id="tripListByYear"></div>
+</div>
+</section>
+
+<section id="tab-expense" class="tab-panel">
+<div class="card">
+  <h2>연도별 경비</h2>
+  <div id="expYears"></div>
+</div>
+<div class="card">
+  <h2>분류별 합계 (전체)</h2>
+  <div id="expCats"></div>
+</div>
+<div class="card">
+  <h2>여행별 경비</h2>
+  <div class="sum-line">눌러서 그 여행 열기 · <span class="exp-tag none">경비 없음</span> <span class="exp-tag flightonly">항공만</span> 은 채울 곳</div>
+  <div id="expTrips"></div>
 </div>
 </section>
 

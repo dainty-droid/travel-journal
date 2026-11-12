@@ -615,14 +615,31 @@
     titleIn.placeholder = "예: 렌터카 3일, 식비 전체";
     var amtIn = makeInput("text");
     amtIn.inputMode = "numeric";
-    amtIn.placeholder = "예: 150000";
+    amtIn.placeholder = "예: 150,000";
+    // 입력하는 동안 세 자리마다 쉼표
+    amtIn.addEventListener("input", function () {
+      var digits = amtIn.value.replace(/[^\d]/g, "");
+      amtIn.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+    });
     var memoIn = makeInput("text");
     memoIn.placeholder = "선택 · 예: 22,400엔";
+    var dateSel = document.createElement("select");
+    var allOpt = document.createElement("option");
+    allOpt.value = "";
+    allOpt.textContent = "전체 일정";
+    dateSel.appendChild(allOpt);
+    datesBetween(trip.startDate, trip.endDate).forEach(function (d, i) {
+      var o = document.createElement("option");
+      o.value = d;
+      o.textContent = (i + 1) + "일차 · " + d.slice(5);
+      dateSel.appendChild(o);
+    });
     var twoCol = document.createElement("div");
     twoCol.className = "two-col";
     twoCol.appendChild(makeField("분류", catSel));
     twoCol.appendChild(makeField("금액 (원)", amtIn));
     sec.appendChild(twoCol);
+    sec.appendChild(makeField("날짜", dateSel));
     sec.appendChild(makeField("내용", titleIn));
     sec.appendChild(makeField("메모", memoIn));
 
@@ -652,8 +669,9 @@
     function fillForm() {
       var it = editingItem();
       catSel.value = it ? it.cat : "food";
+      dateSel.value = it ? (it.date || "") : "";
       titleIn.value = it ? (it.title || "") : "";
-      amtIn.value = it ? String(it.amount || "") : "";
+      amtIn.value = it && it.amount ? Number(it.amount).toLocaleString("ko-KR") : "";
       memoIn.value = it ? (it.memo || "") : "";
       saveBtn.textContent = it ? "수정 저장" : "+ 경비 추가";
       cancelBtn.style.display = it ? "" : "none";
@@ -671,7 +689,7 @@
       row.dataset.id = x.id;
       var t = document.createElement("span");
       t.className = "exp-title";
-      t.textContent = catLabel(x.cat) + " · " + (x.title || "");
+      t.textContent = catLabel(x.cat) + (x.date ? " · " + x.date.slice(5) : "") + " · " + (x.title || "");
       if (x.memo) {
         var m = document.createElement("span");
         m.className = "exp-memo";
@@ -707,6 +725,7 @@
         trip.expenses.push(it);
       }
       it.cat = catSel.value;
+      it.date = dateSel.value;
       it.title = titleIn.value.trim();
       it.amount = amount;
       it.memo = memoIn.value.trim();
@@ -739,6 +758,7 @@
   function buildTripCardEl(trip) {
     var card = document.createElement("div");
     card.className = "trip-card" + (selectMode === "trips" && selected[trip.id] ? " picked" : "");
+    card.dataset.tripId = trip.id;
 
     var head = document.createElement("div");
     head.className = "trip-head pick-row";
@@ -978,6 +998,108 @@
     });
   }
 
+  // ---------- 경비 탭 ----------
+  function openTripInByTrip(tripId) {
+    openTripIds[tripId] = true;
+    switchTab("bytrip");
+    renderAll();
+    var el = document.querySelector('#tripListByTrip .trip-card[data-trip-id="' + tripId + '"]');
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.add("flash");
+    setTimeout(function () { el.classList.remove("flash"); }, 1500);
+  }
+
+  function renderExpenseTab() {
+    var sorted = tripsSorted();
+    var yearsEl = document.getElementById("expYears");
+    var catsEl = document.getElementById("expCats");
+    var tripsEl = document.getElementById("expTrips");
+    yearsEl.innerHTML = "";
+    catsEl.innerHTML = "";
+    tripsEl.innerHTML = "";
+    if (!sorted.length) {
+      tripsEl.innerHTML = '<div class="empty-note">아직 여행이 없습니다.</div>';
+      return;
+    }
+
+    // 연도별 합계 vs 예산
+    var byYear = {};
+    sorted.forEach(function (t) {
+      var y = (t.startDate || "").slice(0, 4) || "미상";
+      if (!byYear[y]) byYear[y] = { total: 0, count: 0 };
+      byYear[y].total += tripTotal(t);
+      byYear[y].count += 1;
+    });
+    Object.keys(byYear).sort().reverse().forEach(function (y) {
+      var v = byYear[y];
+      var pct = v.total / YEAR_BUDGET * 100;
+      var row = document.createElement("div");
+      row.className = "ey-row";
+      row.innerHTML = '<div class="ey-head"><b></b><span></span></div><div class="ey-bar-wrap"><div class="ey-bar"></div></div>';
+      row.querySelector("b").textContent = y + "년 · " + v.count + "번";
+      var sp = row.querySelector("span");
+      sp.textContent = won(v.total) + " / " + man(YEAR_BUDGET) + " (" + Math.round(pct) + "%)";
+      if (pct > 100) sp.className = "over";
+      var bar = row.querySelector(".ey-bar");
+      bar.style.width = Math.min(100, pct) + "%";
+      bar.className = "ey-bar" + (pct > 100 ? " over" : pct > 80 ? " warn" : "");
+      yearsEl.appendChild(row);
+    });
+
+    // 분류별 합계 (전체)
+    var byCat = {};
+    var all = 0;
+    sorted.forEach(function (t) {
+      (t.expenses || []).forEach(function (x) {
+        var a = Number(x.amount) || 0;
+        byCat[x.cat] = (byCat[x.cat] || 0) + a;
+        all += a;
+      });
+    });
+    if (!all) {
+      catsEl.innerHTML = '<div class="empty-note">아직 입력한 경비가 없어요.</div>';
+    } else {
+      var max = Math.max.apply(null, Object.keys(byCat).map(function (k) { return byCat[k]; }));
+      EXP_CATS.forEach(function (c) {
+        if (!byCat[c.key]) return;
+        var row = document.createElement("div");
+        row.className = "exp-bar-row";
+        row.innerHTML = '<span class="exp-bar-label"></span><span class="exp-bar-wrap"><span class="exp-bar"></span></span><span class="exp-bar-amt"></span>';
+        row.querySelector(".exp-bar-label").textContent = c.label;
+        row.querySelector(".exp-bar").style.width = (byCat[c.key] / max * 100) + "%";
+        row.querySelector(".exp-bar-amt").textContent = man(byCat[c.key]);
+        catsEl.appendChild(row);
+      });
+      var tot = document.createElement("div");
+      tot.className = "exp-total";
+      tot.style.marginTop = "8px";
+      tot.textContent = "전체 " + won(all);
+      catsEl.appendChild(tot);
+    }
+
+    // 여행별 목록 (경비 없음 / 항공만 표시)
+    sorted.forEach(function (t) {
+      var total = tripTotal(t);
+      var exps = t.expenses || [];
+      var row = document.createElement("div");
+      row.className = "et-row";
+      row.innerHTML = '<div class="et-main"><div class="et-place"></div><div class="et-sub"></div></div><div class="et-amt"><b></b><span></span></div>';
+      var placeEl = row.querySelector(".et-place");
+      placeEl.textContent = t.place;
+      if (!exps.length) {
+        placeEl.insertAdjacentHTML("beforeend", ' <span class="exp-tag none">경비 없음</span>');
+      } else if (exps.every(function (x) { return x.cat === "flight"; })) {
+        placeEl.insertAdjacentHTML("beforeend", ' <span class="exp-tag flightonly">항공만</span>');
+      }
+      row.querySelector(".et-sub").textContent = formatDateRange(t) + " · " + tripDays(t) + "일";
+      row.querySelector(".et-amt b").textContent = total ? man(total) : "-";
+      row.querySelector(".et-amt span").textContent = total ? "하루 " + man(total / tripDays(t)) : "";
+      row.addEventListener("click", function () { openTripInByTrip(t.id); });
+      tripsEl.appendChild(row);
+    });
+  }
+
   function renderByYear() {
     var container = document.getElementById("tripListByYear");
     container.innerHTML = "";
@@ -1142,6 +1264,7 @@
     renderEntryList();
     renderByTrip();
     renderByYear();
+    renderExpenseTab();
     renderBackupStatus();
   }
 
@@ -1150,7 +1273,7 @@
   var savedTab = "write";
   try {
     var st = localStorage.getItem("travelActiveTab_v1");
-    if (st === "write" || st === "bytrip" || st === "byyear") savedTab = st;
+    if (st === "write" || st === "bytrip" || st === "byyear" || st === "expense") savedTab = st;
   } catch (e) {}
   switchTab(savedTab);
 
