@@ -128,6 +128,32 @@
   .trip-section + .trip-section { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
   .trip-section button.secondary { width: 100%; }
 
+  /* 경비 */
+  .exp-total { font-size: 0.9em; font-weight: 800; margin-bottom: 8px; }
+  .exp-total small { color: var(--muted); font-weight: 600; }
+  .exp-bar-row { display: flex; align-items: center; gap: 8px; font-size: 0.75em; margin-bottom: 5px; }
+  .exp-bar-label { width: 72px; flex-shrink: 0; color: var(--muted); }
+  .exp-bar-wrap { flex: 1; background: var(--card); border-radius: 5px; height: 12px; overflow: hidden; }
+  .exp-bar { height: 100%; background: var(--accent); border-radius: 5px; min-width: 3px; }
+  .exp-bar-amt { width: 64px; flex-shrink: 0; text-align: right; }
+  .exp-list { margin: 10px 0; }
+  .exp-item {
+    display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+    padding: 8px 10px; background: var(--card); border-radius: 8px; margin-bottom: 6px;
+    font-size: 0.82em; cursor: pointer;
+  }
+  .exp-item.editing { box-shadow: inset 0 0 0 2px var(--accent); }
+  .exp-item .exp-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exp-item .exp-memo { color: var(--muted); font-size: 0.9em; }
+  .exp-item .exp-amt { font-weight: 700; white-space: nowrap; }
+  .exp-form-btns { display: flex; gap: 8px; }
+  .exp-form-btns button { flex: 1; }
+  .exp-del-link { display: block; margin: 8px auto 0; background: none; border: none; color: var(--warn); font-size: 0.8em; }
+  .sum-line { font-size: 0.8em; color: var(--muted); margin: -4px 0 12px; }
+  .sum-line b { color: var(--text); }
+  .year-title small { font-size: 0.65em; color: var(--muted); font-weight: 600; margin-left: 6px; }
+  .year-title small.over { color: var(--warn); }
+
   /* 휴지통 / 선택 삭제 */
   .card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .card-title-row h2 { margin: 0; }
@@ -324,6 +350,7 @@
     <h2>여행별 모아보기</h2>
     <button type="button" class="trash-btn" data-select="trips" title="여행 삭제">🗑</button>
   </div>
+  <div class="sum-line" id="allTripsSum"></div>
   <div id="tripListByTrip"></div>
 </div>
 </section>

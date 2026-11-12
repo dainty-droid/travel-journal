@@ -73,6 +73,40 @@
     return trip.startDate || "";
   }
 
+  // ---------- 경비 ----------
+  var EXP_CATS = [
+    { key: "flight", label: "✈️ 항공" },
+    { key: "stay", label: "🏨 숙소" },
+    { key: "transport", label: "🚗 교통" },
+    { key: "food", label: "🍜 식비" },
+    { key: "activity", label: "🎫 관광·액티비티" },
+    { key: "shopping", label: "🛍 쇼핑" },
+    { key: "etc", label: "기타" }
+  ];
+  var YEAR_BUDGET = 6000000; // 여행통장 연 600만원
+
+  function catLabel(key) {
+    var c = EXP_CATS.find(function (x) { return x.key === key; });
+    return c ? c.label : "기타";
+  }
+
+  function tripTotal(trip) {
+    return (trip.expenses || []).reduce(function (s, x) { return s + (Number(x.amount) || 0); }, 0);
+  }
+
+  function tripDays(trip) {
+    if (!trip.startDate) return 1;
+    var a = strToDate(trip.startDate), b = strToDate(trip.endDate || trip.startDate);
+    return Math.max(1, Math.round((b - a) / 86400000) + 1);
+  }
+
+  function won(n) { return Math.round(n).toLocaleString("ko-KR") + "원"; }
+  function man(n) {
+    if (n < 10000) return won(n);
+    var v = n / 10000;
+    return (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10) + "만";
+  }
+
   function entryPreview(entry) {
     var parts = [entry.discovery, entry.connection, entry.selfDiscovery, entry.summary]
       .filter(function (v) { return v && v.trim(); });
@@ -532,6 +566,176 @@
     return el;
   }
 
+  var editExpenseIdByTrip = {}; // 카드마다 수정 중인 경비 항목
+
+  function buildExpenseSection(trip) {
+    if (!trip.expenses) trip.expenses = [];
+    var sec = document.createElement("div");
+    sec.className = "trip-section";
+    var title = document.createElement("div");
+    title.className = "trip-section-title";
+    title.textContent = "경비 (대략)";
+    sec.appendChild(title);
+
+    var total = tripTotal(trip);
+    if (total) {
+      var tot = document.createElement("div");
+      tot.className = "exp-total";
+      tot.innerHTML = "총 " + won(total) + " <small>· " + tripDays(trip) + "일 · 하루 " + man(total / tripDays(trip)) + "</small>";
+      sec.appendChild(tot);
+
+      var byCat = {};
+      trip.expenses.forEach(function (x) { byCat[x.cat] = (byCat[x.cat] || 0) + (Number(x.amount) || 0); });
+      var max = Math.max.apply(null, Object.keys(byCat).map(function (k) { return byCat[k]; }));
+      EXP_CATS.forEach(function (c) {
+        if (!byCat[c.key]) return;
+        var row = document.createElement("div");
+        row.className = "exp-bar-row";
+        row.innerHTML = '<span class="exp-bar-label"></span><span class="exp-bar-wrap"><span class="exp-bar"></span></span><span class="exp-bar-amt"></span>';
+        row.querySelector(".exp-bar-label").textContent = c.label;
+        row.querySelector(".exp-bar").style.width = (byCat[c.key] / max * 100) + "%";
+        row.querySelector(".exp-bar-amt").textContent = man(byCat[c.key]);
+        sec.appendChild(row);
+      });
+    }
+
+    var list = document.createElement("div");
+    list.className = "exp-list";
+    sec.appendChild(list);
+
+    // 입력 폼
+    var catSel = document.createElement("select");
+    EXP_CATS.forEach(function (c) {
+      var o = document.createElement("option");
+      o.value = c.key;
+      o.textContent = c.label;
+      catSel.appendChild(o);
+    });
+    var titleIn = makeInput("text");
+    titleIn.placeholder = "예: 렌터카 3일, 식비 전체";
+    var amtIn = makeInput("text");
+    amtIn.inputMode = "numeric";
+    amtIn.placeholder = "예: 150000";
+    var memoIn = makeInput("text");
+    memoIn.placeholder = "선택 · 예: 22,400엔";
+    var twoCol = document.createElement("div");
+    twoCol.className = "two-col";
+    twoCol.appendChild(makeField("분류", catSel));
+    twoCol.appendChild(makeField("금액 (원)", amtIn));
+    sec.appendChild(twoCol);
+    sec.appendChild(makeField("내용", titleIn));
+    sec.appendChild(makeField("메모", memoIn));
+
+    var btns = document.createElement("div");
+    btns.className = "exp-form-btns";
+    var saveBtn = document.createElement("button");
+    saveBtn.className = "secondary";
+    saveBtn.type = "button";
+    var cancelBtn = document.createElement("button");
+    cancelBtn.className = "secondary";
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "새로 쓰기";
+    btns.appendChild(saveBtn);
+    btns.appendChild(cancelBtn);
+    sec.appendChild(btns);
+    var delLink = document.createElement("button");
+    delLink.type = "button";
+    delLink.className = "exp-del-link";
+    delLink.textContent = "이 항목 삭제";
+    sec.appendChild(delLink);
+
+    function editingItem() {
+      var id = editExpenseIdByTrip[trip.id];
+      return id ? trip.expenses.find(function (x) { return x.id === id; }) : null;
+    }
+
+    function fillForm() {
+      var it = editingItem();
+      catSel.value = it ? it.cat : "food";
+      titleIn.value = it ? (it.title || "") : "";
+      amtIn.value = it ? String(it.amount || "") : "";
+      memoIn.value = it ? (it.memo || "") : "";
+      saveBtn.textContent = it ? "수정 저장" : "+ 경비 추가";
+      cancelBtn.style.display = it ? "" : "none";
+      delLink.style.display = it ? "" : "none";
+      list.querySelectorAll(".exp-item").forEach(function (el) {
+        el.classList.toggle("editing", !!it && el.dataset.id === it.id);
+      });
+    }
+
+    trip.expenses.slice().sort(function (a, b) {
+      return EXP_CATS.findIndex(function (c) { return c.key === a.cat; }) - EXP_CATS.findIndex(function (c) { return c.key === b.cat; });
+    }).forEach(function (x) {
+      var row = document.createElement("div");
+      row.className = "exp-item";
+      row.dataset.id = x.id;
+      var t = document.createElement("span");
+      t.className = "exp-title";
+      t.textContent = catLabel(x.cat) + " · " + (x.title || "");
+      if (x.memo) {
+        var m = document.createElement("span");
+        m.className = "exp-memo";
+        m.textContent = " (" + x.memo + ")";
+        t.appendChild(m);
+      }
+      var a = document.createElement("span");
+      a.className = "exp-amt";
+      a.textContent = won(Number(x.amount) || 0);
+      row.appendChild(t);
+      row.appendChild(a);
+      row.addEventListener("click", function () {
+        editExpenseIdByTrip[trip.id] = x.id;
+        fillForm();
+        catSel.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      list.appendChild(row);
+    });
+    if (!trip.expenses.length) {
+      var empty = document.createElement("div");
+      empty.className = "empty-note";
+      empty.style.padding = "4px 0";
+      empty.textContent = "아직 경비가 없어요.";
+      list.appendChild(empty);
+    }
+
+    saveBtn.addEventListener("click", function () {
+      var amount = Number(String(amtIn.value).replace(/[^\d]/g, ""));
+      if (!amount) { alert("금액을 숫자로 입력해주세요."); return; }
+      var it = editingItem();
+      if (!it) {
+        it = { id: uid() };
+        trip.expenses.push(it);
+      }
+      it.cat = catSel.value;
+      it.title = titleIn.value.trim();
+      it.amount = amount;
+      it.memo = memoIn.value.trim();
+      editExpenseIdByTrip[trip.id] = null;
+      saveTrips();
+      renderAll();
+      showToast("경비를 저장했습니다");
+    });
+
+    cancelBtn.addEventListener("click", function () {
+      editExpenseIdByTrip[trip.id] = null;
+      fillForm();
+    });
+
+    delLink.addEventListener("click", function () {
+      var it = editingItem();
+      if (!it) return;
+      if (!confirm("정말 이 경비를 지울까요?\n\n· " + catLabel(it.cat) + " " + (it.title || "") + " " + won(it.amount) + "\n\n되돌릴 수 없어요.")) return;
+      trip.expenses = trip.expenses.filter(function (x) { return x.id !== it.id; });
+      editExpenseIdByTrip[trip.id] = null;
+      saveTrips();
+      renderAll();
+      showToast("경비를 삭제했습니다");
+    });
+
+    fillForm();
+    return sec;
+  }
+
   function buildTripCardEl(trip) {
     var card = document.createElement("div");
     card.className = "trip-card" + (selectMode === "trips" && selected[trip.id] ? " picked" : "");
@@ -561,7 +765,9 @@
     var tripEntries = getEntriesForTrip(trip.id);
     var meta = document.createElement("div");
     meta.className = "trip-meta";
-    meta.textContent = "기록 " + tripEntries.length + "일";
+    var total = tripTotal(trip);
+    meta.textContent = "기록 " + tripEntries.length + "일" +
+      (total ? " · 경비 " + man(total) + " (하루 " + man(total / tripDays(trip)) + ")" : "");
     card.appendChild(meta);
 
     var foot = document.createElement("div");
@@ -616,6 +822,8 @@
     });
     infoSec.appendChild(infoSaveBtn);
     detail.appendChild(infoSec);
+
+    detail.appendChild(buildExpenseSection(trip));
 
     // --- 그날의 기록 쓰기/수정 ---
     var daySec = document.createElement("div");
@@ -754,6 +962,10 @@
     var container = document.getElementById("tripListByTrip");
     container.innerHTML = "";
     var sorted = tripsSorted();
+    var allTotal = sorted.reduce(function (s, t) { return s + tripTotal(t); }, 0);
+    document.getElementById("allTripsSum").innerHTML = sorted.length
+      ? "전체 <b>" + sorted.length + "번</b>" + (allTotal ? " · 경비 합계 <b>" + man(allTotal) + "</b>" : "")
+      : "";
     if (!sorted.length) {
       var empty = document.createElement("div");
       empty.className = "empty-note";
@@ -791,6 +1003,11 @@
       var title = document.createElement("div");
       title.className = "year-title";
       title.textContent = y + "년";
+      var yTotal = byYear[y].reduce(function (s, t) { return s + tripTotal(t); }, 0);
+      var sm = document.createElement("small");
+      sm.textContent = byYear[y].length + "번" + (yTotal ? " · " + man(yTotal) + " / 예산 " + man(YEAR_BUDGET) : "");
+      if (yTotal > YEAR_BUDGET) sm.className = "over";
+      title.appendChild(sm);
       group.appendChild(title);
       byYear[y].forEach(function (trip) {
         group.appendChild(buildTripCardEl(trip));
@@ -823,8 +1040,32 @@
     banner.classList.toggle("show", hasData && days >= BACKUP_REMIND_DAYS);
   }
 
+  function isNativeApp() {
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  }
+
+  // APK에서는 웹뷰가 파일 다운로드를 못 하므로, 임시 파일로 저장한 뒤 공유창(드라이브/카톡/내 파일 등)으로 내보낸다
+  function exportNative(data) {
+    var P = window.Capacitor.Plugins;
+    var name = "travel_" + todayStr() + ".json";
+    P.Filesystem.writeFile({ path: name, data: JSON.stringify(data, null, 2), directory: "CACHE", encoding: "utf8" })
+      .then(function (res) {
+        return P.Share.share({ title: "항적 백업", files: [res.uri], dialogTitle: "백업 파일 저장/보내기" });
+      })
+      .then(function () {
+        try { localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString()); } catch (e) {}
+        renderBackupStatus();
+        showToast("백업 파일을 내보냈습니다");
+      })
+      .catch(function (err) {
+        if (/cancel/i.test(String(err && err.message || err))) return;
+        alert("백업 실패: " + (err && err.message || err));
+      });
+  }
+
   function exportAll() {
     var data = { trips: trips, entries: entries };
+    if (isNativeApp()) { exportNative(data); return; }
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -858,9 +1099,19 @@
 
         var tripById = {};
         trips.forEach(function (t) { tripById[t.id] = t; });
+        // 같은 여행이 이미 있으면 통째로 덮지 않고 합친다:
+        // 가져온 쪽에 값이 있는 칸만 바꾸고(빈 소회로 기존 소회를 지우지 않음), 경비는 항목 id 기준으로 합침
         importedTrips.forEach(function (t) {
           if (!t.id) t.id = uid();
-          tripById[t.id] = t;
+          var cur = tripById[t.id];
+          if (!cur) { tripById[t.id] = t; return; }
+          ["place", "startDate", "endDate", "retro"].forEach(function (k) {
+            if (t[k]) cur[k] = t[k];
+          });
+          var expById = {};
+          (cur.expenses || []).forEach(function (x) { expById[x.id] = x; });
+          (t.expenses || []).forEach(function (x) { expById[x.id || uid()] = x; });
+          cur.expenses = Object.values(expById);
         });
         trips = Object.values(tripById);
 
@@ -904,7 +1155,7 @@
   switchTab(savedTab);
 
   // ---------- 서비스워커 등록 ----------
-  if ("serviceWorker" in navigator) {
+  if ("serviceWorker" in navigator && !isNativeApp()) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("service-worker.js").catch(function (e) {
         console.warn("서비스워커 등록 실패", e);
