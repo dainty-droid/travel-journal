@@ -546,7 +546,30 @@
   }
 
   // ---------- 백업 ----------
-  document.getElementById("exportBtn").addEventListener("click", function () {
+  var LAST_BACKUP_KEY = "travelLastBackupAt_v1";
+  var BACKUP_REMIND_DAYS = 7;
+
+  // 마지막 백업 후 7일이 지났으면 상단 배너를 띄운다 (기록이 하나도 없으면 안 띄움)
+  function renderBackupStatus() {
+    var last = null;
+    try { last = localStorage.getItem(LAST_BACKUP_KEY) || null; } catch (e) {}
+    var banner = document.getElementById("backupBanner");
+    var bannerText = document.getElementById("backupBannerText");
+    var lastEl = document.getElementById("backupLast");
+    var hasData = trips.length > 0 || entries.length > 0;
+    if (!last) {
+      bannerText.textContent = "아직 백업을 한 적이 없어요";
+      lastEl.textContent = "마지막 백업: 없음";
+      banner.classList.toggle("show", hasData);
+      return;
+    }
+    var days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+    lastEl.textContent = "마지막 백업: " + last.slice(0, 10) + (days > 0 ? " (" + days + "일 전)" : " (오늘)");
+    bannerText.textContent = "마지막 백업 " + days + "일 전";
+    banner.classList.toggle("show", hasData && days >= BACKUP_REMIND_DAYS);
+  }
+
+  function exportAll() {
     var data = { trips: trips, entries: entries };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -557,8 +580,13 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    try { localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString()); } catch (e) {}
+    renderBackupStatus();
     showToast("내보냈습니다");
-  });
+  }
+
+  document.getElementById("exportBtn").addEventListener("click", exportAll);
+  document.getElementById("backupBannerBtn").addEventListener("click", exportAll);
 
   document.getElementById("importBtn").addEventListener("click", function () {
     document.getElementById("importFile").click();
@@ -609,6 +637,7 @@
     renderEntryList();
     renderByTrip();
     renderByYear();
+    renderBackupStatus();
   }
 
   renderAll();
