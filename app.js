@@ -29,12 +29,15 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  function dateToStr(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function strToDate(s) {
+    var p = s.split("-").map(Number);
+    return new Date(p[0], p[1] - 1, p[2]);
+  }
   function todayStr() {
-    var d = new Date();
-    var y = d.getFullYear();
-    var m = String(d.getMonth() + 1).padStart(2, "0");
-    var day = String(d.getDate()).padStart(2, "0");
-    return y + "-" + m + "-" + day;
+    return dateToStr(new Date());
   }
 
   var trips = loadJson(TRIPS_KEY);
@@ -144,6 +147,107 @@
     newTripForm.classList.toggle("show");
   });
 
+  // 여행은 한 달씩 가는 일이 없으니, 시작일/종료일을 따로따로 입력받는 대신 달력
+  // 한 화면에서 시작일 찍고 종료일 찍는 방식으로(관리자님 요청, 2026-11-12).
+  var ntCalCursor = new Date();
+  var ntRangeStart = null; // Date
+  var ntRangeEnd = null; // Date
+
+  function renderNtCalHeader() {
+    var dowEl = document.getElementById("ntCalDow");
+    if (dowEl.children.length === 0) {
+      ["월", "화", "수", "목", "금", "토", "일"].forEach(function (d) {
+        var el = document.createElement("div");
+        el.className = "cal-dow";
+        el.textContent = d;
+        dowEl.appendChild(el);
+      });
+    }
+  }
+
+  function renderNtRangeReadout() {
+    var el = document.getElementById("ntRangeReadout");
+    if (!ntRangeStart) {
+      el.textContent = "날짜를 선택해주세요";
+    } else if (!ntRangeEnd) {
+      el.textContent = dateToStr(ntRangeStart) + " (종료일도 선택하거나, 하루짜리면 그대로 두세요)";
+    } else {
+      el.textContent = dateToStr(ntRangeStart) + " → " + dateToStr(ntRangeEnd);
+    }
+    document.getElementById("ntStart").value = ntRangeStart ? dateToStr(ntRangeStart) : "";
+    document.getElementById("ntEnd").value = ntRangeEnd ? dateToStr(ntRangeEnd) : "";
+  }
+
+  function renderNtCalendar() {
+    var y = ntCalCursor.getFullYear(), m = ntCalCursor.getMonth();
+    document.getElementById("ntCalTitle").textContent = y + "년 " + (m + 1) + "월";
+
+    var first = new Date(y, m, 1);
+    var startOffset = (first.getDay() === 0) ? 6 : first.getDay() - 1;
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    var todayS = todayStr();
+
+    var grid = document.getElementById("ntCalGrid");
+    grid.innerHTML = "";
+
+    for (var i = 0; i < startOffset; i++) {
+      var pad = document.createElement("div");
+      pad.className = "cal-day empty";
+      grid.appendChild(pad);
+    }
+
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateObj = new Date(y, m, d);
+      var dateStr = dateToStr(dateObj);
+      var cell = document.createElement("div");
+      cell.className = "cal-day";
+      if (dateStr === todayS) cell.classList.add("today");
+
+      if (ntRangeStart && dateStr === dateToStr(ntRangeStart)) cell.classList.add("range-start");
+      if (ntRangeEnd && dateStr === dateToStr(ntRangeEnd)) cell.classList.add("range-end");
+      if (ntRangeStart && ntRangeEnd && dateObj > ntRangeStart && dateObj < ntRangeEnd) cell.classList.add("in-range");
+
+      cell.textContent = d;
+      cell.addEventListener("click", function () {
+        var clicked = strToDate(this.dataset.date);
+        if (!ntRangeStart || (ntRangeStart && ntRangeEnd)) {
+          ntRangeStart = clicked;
+          ntRangeEnd = null;
+        } else if (clicked < ntRangeStart) {
+          ntRangeEnd = ntRangeStart;
+          ntRangeStart = clicked;
+        } else {
+          ntRangeEnd = clicked;
+        }
+        renderNtCalendar();
+        renderNtRangeReadout();
+      });
+      cell.dataset.date = dateStr;
+
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById("ntPrevMonth").addEventListener("click", function () {
+    ntCalCursor = new Date(ntCalCursor.getFullYear(), ntCalCursor.getMonth() - 1, 1);
+    renderNtCalendar();
+  });
+  document.getElementById("ntNextMonth").addEventListener("click", function () {
+    ntCalCursor = new Date(ntCalCursor.getFullYear(), ntCalCursor.getMonth() + 1, 1);
+    renderNtCalendar();
+  });
+
+  function resetNtDateRange() {
+    ntRangeStart = null;
+    ntRangeEnd = null;
+    ntCalCursor = new Date();
+    renderNtCalendar();
+    renderNtRangeReadout();
+  }
+
+  renderNtCalHeader();
+  resetNtDateRange();
+
   document.getElementById("ntSaveBtn").addEventListener("click", function () {
     var place = document.getElementById("ntPlace").value.trim();
     var start = document.getElementById("ntStart").value;
@@ -151,7 +255,7 @@
     var retro = document.getElementById("ntRetro").value.trim();
 
     if (!place) { alert("여행지를 입력해주세요."); return; }
-    if (!start) { alert("시작일을 입력해주세요."); return; }
+    if (!start) { alert("여행 기간(시작일)을 달력에서 선택해주세요."); return; }
 
     var trip = {
       id: uid(),
@@ -166,13 +270,13 @@
     setActiveTripId(trip.id);
 
     document.getElementById("ntPlace").value = "";
-    document.getElementById("ntStart").value = "";
-    document.getElementById("ntEnd").value = "";
     document.getElementById("ntRetro").value = "";
+    resetNtDateRange();
     newTripForm.classList.remove("show");
 
     renderAll();
-    showToast("여행을 추가했습니다");
+    showToast("여행을 추가했습니다 - 아래에서 그날의 기록을 적어보세요");
+    window.scrollTo({ top: entryFormCard.offsetTop - 10, behavior: "smooth" });
   });
 
   // ---------- 그날의 기록 ----------

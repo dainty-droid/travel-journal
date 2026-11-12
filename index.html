@@ -132,6 +132,28 @@
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   }
   .toast.show { opacity: 1; }
+
+  /* 새 여행 기간 선택 달력 */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .cal-head button {
+    background: var(--card); border: none; color: var(--text);
+    border-radius: 8px; padding: 6px 12px; font-size: 1em;
+  }
+  .cal-title { font-weight: 700; font-size: 0.9em; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-dow { text-align: center; font-size: 0.68em; color: var(--muted); padding-bottom: 4px; }
+  .cal-day {
+    aspect-ratio: 1; border-radius: 8px; background: var(--card);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.78em; color: var(--text); cursor: pointer;
+  }
+  .cal-day.empty { background: transparent; cursor: default; }
+  .cal-day.today { outline: 1px solid var(--muted); }
+  .cal-day.in-range { background: rgba(74,144,217,0.28); border-radius: 0; }
+  .cal-day.range-start { background: var(--accent); color: #fff; font-weight: 700; border-radius: 8px 0 0 8px; }
+  .cal-day.range-end { background: var(--accent); color: #fff; font-weight: 700; border-radius: 0 8px 8px 0; }
+  .cal-day.range-start.range-end { border-radius: 8px; }
+  .range-readout { font-size: 0.78em; color: var(--muted); text-align: center; margin: 8px 0 2px; }
 </style>
 </head>
 <body>
@@ -163,15 +185,18 @@
       <label>여행지</label>
       <input type="text" id="ntPlace" placeholder="예: 이탈리아, 미야코지마">
     </div>
-    <div class="two-col">
-      <div class="field">
-        <label>시작일</label>
-        <input type="date" id="ntStart">
+    <div class="field">
+      <label>여행 기간 <span style="color:var(--muted); font-weight:400;">— 시작일 찍고 종료일 찍기 (하루면 한 번만)</span></label>
+      <div class="cal-head">
+        <button type="button" id="ntPrevMonth">◀</button>
+        <div class="cal-title" id="ntCalTitle"></div>
+        <button type="button" id="ntNextMonth">▶</button>
       </div>
-      <div class="field">
-        <label>종료일 (선택)</label>
-        <input type="date" id="ntEnd">
-      </div>
+      <div class="cal-grid" id="ntCalDow"></div>
+      <div class="cal-grid" id="ntCalGrid"></div>
+      <div class="range-readout" id="ntRangeReadout">날짜를 선택해주세요</div>
+      <input type="hidden" id="ntStart">
+      <input type="hidden" id="ntEnd">
     </div>
     <div class="field">
       <label>전체 소회 (선택, 나중에도 쓸 수 있음)</label>
