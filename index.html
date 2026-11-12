@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>항적</title>
+<meta name="theme-color" content="#2a5c9e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #14171c;
+    --card: #1e232b;
+    --card2: #262c36;
+    --text: #e8eaed;
+    --muted: #8b93a1;
+    --line: #333a46;
+    --accent: #4a90d9;
+    --ok: #3fb950;
+    --warn: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 40px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Pretendard", "Noto Sans KR", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header {
+    padding: 18px 16px 10px;
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  h1 { font-size: 1.25em; margin: 0 0 2px; }
+  .subtitle { color: var(--muted); font-size: 0.82em; margin: 0 0 10px; }
+
+  .tabbar { display: flex; gap: 8px; }
+  .tab-btn {
+    flex: 1; background: var(--card2); border: none; color: var(--muted);
+    border-radius: 10px; padding: 10px; font-size: 0.88em; font-weight: 700;
+  }
+  .tab-btn.active { color: var(--text); background: #1c2c3a; box-shadow: inset 0 0 0 2px var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    margin: 12px 16px;
+    padding: 14px;
+  }
+  .card h2 { font-size: 1em; margin: 0 0 10px; }
+  .card h3 { font-size: 0.95em; margin: 0 0 4px; }
+
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 0.8em; color: var(--muted); margin-bottom: 4px; }
+  .field select,
+  .field input[type="date"],
+  .field input[type="text"],
+  .field textarea {
+    width: 100%; background: var(--card2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 10px; font-size: 0.95em;
+    font-family: inherit;
+  }
+  .field textarea { resize: vertical; min-height: 56px; }
+  .two-col { display: flex; gap: 8px; }
+  .two-col .field { flex: 1; }
+
+  button.primary {
+    width: 100%; padding: 13px; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff; font-weight: 700; font-size: 1em;
+  }
+  button.secondary {
+    background: var(--card2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px; font-size: 0.85em;
+  }
+  button.danger { background: var(--warn); color: #fff; border: none; border-radius: 8px; padding: 8px 10px; font-size: 0.8em; }
+  button.link {
+    background: none; border: none; color: var(--accent); font-size: 0.85em; padding: 4px 0;
+  }
+
+  .empty-note { color: var(--muted); font-size: 0.85em; text-align: center; padding: 14px 0; }
+
+  /* 여행 선택 + 새 여행 */
+  .trip-select-row { display: flex; gap: 8px; align-items: flex-end; }
+  .trip-select-row .field { flex: 1; margin-bottom: 0; }
+  .new-trip-form { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: none; }
+  .new-trip-form.show { display: block; }
+
+  /* 엔트리 목록 (기록 탭 미니 타임라인) */
+  .entry-item {
+    padding: 10px; border-radius: 10px; background: var(--card2); margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .entry-item .entry-date { font-weight: 700; font-size: 0.85em; margin-bottom: 4px; }
+  .entry-item .entry-preview { font-size: 0.78em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-item .entry-actions { margin-top: 6px; text-align: right; }
+
+  /* 여행 카드 (여행별 / 연도별 공용) */
+  .trip-card { background: var(--card2); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .trip-card .trip-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .trip-card .trip-place { font-weight: 700; font-size: 1.02em; }
+  .trip-card .trip-dates { font-size: 0.75em; color: var(--muted); white-space: nowrap; }
+  .trip-card .trip-retro {
+    font-size: 0.85em; color: var(--text); margin-top: 8px; line-height: 1.4;
+    white-space: pre-wrap;
+  }
+  .trip-card .trip-retro.placeholder { color: var(--muted); font-style: italic; }
+  .trip-card .trip-meta { font-size: 0.72em; color: var(--muted); margin-top: 6px; }
+  .trip-card .trip-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .trip-detail { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .trip-detail.show { display: block; }
+  .trip-detail textarea { width: 100%; background: var(--card); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 8px; font-size: 0.85em; min-height: 60px; font-family: inherit; }
+  .trip-day { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.82em; }
+  .trip-day:last-child { border-bottom: none; }
+  .trip-day .trip-day-date { font-weight: 700; margin-bottom: 4px; }
+  .trip-day .trip-day-field { color: var(--muted); margin-bottom: 2px; }
+  .trip-day .trip-day-field b { color: var(--text); font-weight: 600; }
+
+  .year-group { margin-bottom: 18px; }
+  .year-group:last-child { margin-bottom: 0; }
+  .year-title { font-size: 1.1em; font-weight: 800; margin: 0 0 10px; color: var(--accent); }
+
+  .io-row { display: flex; gap: 8px; }
+  .io-row > * { flex: 1; }
+  input[type="file"] { display: none; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #2b2f38; color: var(--text); padding: 10px 18px; border-radius: 20px;
+    font-size: 0.85em; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✈️ 항적</h1>
+  <p class="subtitle">여행이 남긴 자취</p>
+  <div class="tabbar" id="tabBar">
+    <button class="tab-btn active" data-tab="write" type="button">기록</button>
+    <button class="tab-btn" data-tab="bytrip" type="button">여행별</button>
+    <button class="tab-btn" data-tab="byyear" type="button">연도별</button>
+  </div>
+</header>
+
+<section id="tab-write" class="tab-panel active">
+
+<div class="card">
+  <h2>어느 여행</h2>
+  <div class="trip-select-row">
+    <div class="field">
+      <label>여행 선택</label>
+      <select id="tripSelect"></select>
+    </div>
+    <button type="button" class="secondary" id="newTripToggleBtn">+ 새 여행</button>
+  </div>
+
+  <div class="new-trip-form" id="newTripForm">
+    <div class="field">
+      <label>여행지</label>
+      <input type="text" id="ntPlace" placeholder="예: 이탈리아, 미야코지마">
+    </div>
+    <div class="two-col">
+      <div class="field">
+        <label>시작일</label>
+        <input type="date" id="ntStart">
+      </div>
+      <div class="field">
+        <label>종료일 (선택)</label>
+        <input type="date" id="ntEnd">
+      </div>
+    </div>
+    <div class="field">
+      <label>전체 소회 (선택, 나중에도 쓸 수 있음)</label>
+      <textarea id="ntRetro" rows="2" placeholder="그 여행이 어땠는지, 나에게 무엇을 남겼는지"></textarea>
+    </div>
+    <button type="button" class="primary" id="ntSaveBtn">여행 추가</button>
+  </div>
+
+  <div id="noTripNote" class="empty-note" style="display:none;">아직 여행이 없어요. "+ 새 여행"으로 먼저 추가해줘.</div>
+</div>
+
+<div class="card" id="entryFormCard" style="display:none;">
+  <h2>그날의 기록</h2>
+  <div class="field">
+    <label>날짜</label>
+    <input type="date" id="eDate">
+  </div>
+  <div class="field">
+    <label>여행의 발견 <span style="color:var(--muted); font-weight:400;">— 새롭게 발견한 장소와 경험</span></label>
+    <textarea id="eDiscovery" rows="3" placeholder="비워둬도 좋아요"></textarea>
+  </div>
+  <div class="field">
+    <label>연결된 것 <span style="color:var(--muted); font-weight:400;">— 사람이나 세상과 온기를 나눈 순간</span></label>
+    <textarea id="eConnection" rows="3" placeholder="비워둬도 좋아요"></textarea>
+  </div>
+  <div class="field">
+    <label>나의 재발견 <span style="color:var(--muted); font-weight:400;">— 나에 대해 더 알게 된 모습</span></label>
+    <textarea id="eSelf" rows="3" placeholder="비워둬도 좋아요"></textarea>
+  </div>
+  <div class="field">
+    <label>종합소감</label>
+    <textarea id="eSummary" rows="3" placeholder="비워둬도 좋아요"></textarea>
+  </div>
+  <button type="button" class="primary" id="eSaveBtn">기록 저장</button>
+</div>
+
+<div class="card" id="entryListCard" style="display:none;">
+  <h2>이 여행의 기록</h2>
+  <div id="entryList"></div>
+</div>
+
+</section>
+
+<section id="tab-bytrip" class="tab-panel">
+<div class="card">
+  <h2>여행별 모아보기</h2>
+  <div id="tripListByTrip"></div>
+</div>
+</section>
+
+<section id="tab-byyear" class="tab-panel">
+<div class="card">
+  <h2>연도별 모아보기</h2>
+  <div id="tripListByYear"></div>
+</div>
+</section>
+
+<div class="card">
+  <h2>백업</h2>
+  <div class="io-row">
+    <button class="secondary" type="button" id="exportBtn">📤 내보내기 (JSON)</button>
+    <button class="secondary" type="button" id="importBtn">📥 가져오기 (JSON)</button>
+  </div>
+  <input type="file" id="importFile" accept="application/json">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
