@@ -338,36 +338,39 @@
     loadEntryForDate(eDate.value || todayStr());
   });
 
-  document.getElementById("eSaveBtn").addEventListener("click", function () {
-    if (!activeTripId) { alert("먼저 여행을 선택하거나 추가해주세요."); return; }
-    var date = eDate.value || todayStr();
-    var discovery = document.getElementById("eDiscovery").value.trim();
-    var connection = document.getElementById("eConnection").value.trim();
-    var selfDiscovery = document.getElementById("eSelf").value.trim();
-    var summary = document.getElementById("eSummary").value.trim();
-
-    var existing = entries.find(function (e) { return e.tripId === activeTripId && e.date === date; });
+  // 같은 여행 + 같은 날짜 기록이 있으면 덮어쓰고, 없으면 새로 만든다 (기록 탭 / 여행 카드 공용)
+  function upsertEntry(tripId, date, f) {
+    var existing = entries.find(function (e) { return e.tripId === tripId && e.date === date; });
     if (existing) {
-      existing.discovery = discovery;
-      existing.connection = connection;
-      existing.selfDiscovery = selfDiscovery;
-      existing.summary = summary;
+      existing.discovery = f.discovery;
+      existing.connection = f.connection;
+      existing.selfDiscovery = f.selfDiscovery;
+      existing.summary = f.summary;
       existing.createdAt = new Date().toISOString();
     } else {
       entries.push({
         id: uid(),
-        tripId: activeTripId,
+        tripId: tripId,
         date: date,
-        discovery: discovery,
-        connection: connection,
-        selfDiscovery: selfDiscovery,
-        summary: summary,
+        discovery: f.discovery,
+        connection: f.connection,
+        selfDiscovery: f.selfDiscovery,
+        summary: f.summary,
         createdAt: new Date().toISOString()
       });
     }
     saveEntries();
-    renderEntryList();
-    renderTripSelect();
+  }
+
+  document.getElementById("eSaveBtn").addEventListener("click", function () {
+    if (!activeTripId) { alert("먼저 여행을 선택하거나 추가해주세요."); return; }
+    upsertEntry(activeTripId, eDate.value || todayStr(), {
+      discovery: document.getElementById("eDiscovery").value.trim(),
+      connection: document.getElementById("eConnection").value.trim(),
+      selfDiscovery: document.getElementById("eSelf").value.trim(),
+      summary: document.getElementById("eSummary").value.trim()
+    });
+    renderAll();
     showToast("기록을 저장했습니다");
   });
 
@@ -385,36 +388,27 @@
     }
     list.forEach(function (entry) {
       var item = document.createElement("div");
-      item.className = "entry-item";
+      item.className = "entry-item pick-row" + (selectMode === "entries" && selected[entry.id] ? " picked" : "");
 
+      var box = document.createElement("span");
+      box.className = "pick-box";
+      box.textContent = "✓";
+      item.appendChild(box);
+
+      var main = document.createElement("div");
+      main.className = "pick-main";
       var dateEl = document.createElement("div");
       dateEl.className = "entry-date";
       dateEl.textContent = entry.date;
-      item.appendChild(dateEl);
-
+      main.appendChild(dateEl);
       var preview = document.createElement("div");
       preview.className = "entry-preview";
       preview.textContent = entryPreview(entry);
-      item.appendChild(preview);
-
-      var actions = document.createElement("div");
-      actions.className = "entry-actions";
-      var del = document.createElement("button");
-      del.className = "danger";
-      del.textContent = "삭제";
-      del.addEventListener("click", function (ev) {
-        ev.stopPropagation();
-        if (!confirm(entry.date + " 기록을 삭제할까요?")) return;
-        entries = entries.filter(function (x) { return x.id !== entry.id; });
-        saveEntries();
-        renderEntryList();
-        if (eDate.value === entry.date) loadEntryForDate(eDate.value);
-        showToast("삭제했습니다");
-      });
-      actions.appendChild(del);
-      item.appendChild(actions);
+      main.appendChild(preview);
+      item.appendChild(main);
 
       item.addEventListener("click", function () {
+        if (selectMode === "entries") { togglePick(entry.id, item); return; }
         loadEntryForDate(entry.date);
         window.scrollTo({ top: entryFormCard.offsetTop - 10, behavior: "smooth" });
       });
@@ -423,15 +417,133 @@
     });
   }
 
+  // ---------- 휴지통: 선택해서 삭제 ----------
+  var selectMode = null; // "trips" | "entries" | null
+  var selected = {};
+  var deleteBar = document.getElementById("deleteBar");
+  var deleteGoBtn = document.getElementById("deleteGoBtn");
+
+  function selectedIds() {
+    return Object.keys(selected).filter(function (k) { return selected[k]; });
+  }
+
+  function updateDeleteBar() {
+    var n = selectedIds().length;
+    deleteGoBtn.textContent = "선택한 " + n + "개 삭제";
+    deleteGoBtn.disabled = n === 0;
+  }
+
+  function togglePick(id, el) {
+    selected[id] = !selected[id];
+    el.classList.toggle("picked", selected[id]);
+    updateDeleteBar();
+  }
+
+  function applySelectModeUI() {
+    document.querySelectorAll(".trash-btn").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.select === selectMode);
+    });
+    document.getElementById("tripListByTrip").classList.toggle("select-mode", selectMode === "trips");
+    document.getElementById("tripListByYear").classList.toggle("select-mode", selectMode === "trips");
+    document.getElementById("entryList").classList.toggle("select-mode", selectMode === "entries");
+    deleteBar.classList.toggle("show", !!selectMode);
+    document.body.classList.toggle("has-delete-bar", !!selectMode);
+    updateDeleteBar();
+  }
+
+  function setSelectMode(mode) {
+    selectMode = mode;
+    selected = {};
+    renderAll();
+    applySelectModeUI();
+    if (mode) showToast(mode === "trips" ? "지울 여행을 눌러서 선택하세요" : "지울 기록을 눌러서 선택하세요");
+  }
+
+  document.querySelectorAll(".trash-btn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      setSelectMode(selectMode === b.dataset.select ? null : b.dataset.select);
+    });
+  });
+
+  document.getElementById("deleteCancelBtn").addEventListener("click", function () {
+    setSelectMode(null);
+  });
+
+  deleteGoBtn.addEventListener("click", function () {
+    var ids = selectedIds();
+    if (!ids.length) return;
+    var msg;
+    if (selectMode === "trips") {
+      var names = trips.filter(function (t) { return selected[t.id]; })
+        .map(function (t) { return "· " + t.place + " (" + (t.startDate || "") + ")"; });
+      msg = "정말 이 여행 " + ids.length + "개를 지울까요?\n\n" + names.join("\n") +
+        "\n\n그 여행의 날짜별 기록도 모두 함께 지워지고, 되돌릴 수 없어요.";
+    } else {
+      var dates = entries.filter(function (e) { return selected[e.id]; })
+        .map(function (e) { return "· " + e.date; });
+      msg = "정말 이 기록 " + ids.length + "개를 지울까요?\n\n" + dates.join("\n") + "\n\n되돌릴 수 없어요.";
+    }
+    if (!confirm(msg)) return;
+
+    if (selectMode === "trips") {
+      trips = trips.filter(function (t) { return !selected[t.id]; });
+      entries = entries.filter(function (e) { return !selected[e.tripId]; });
+      saveTrips();
+      if (activeTripId && selected[activeTripId]) setActiveTripId(null);
+    } else {
+      entries = entries.filter(function (e) { return !selected[e.id]; });
+    }
+    saveEntries();
+    showToast(ids.length + "개를 삭제했습니다");
+    setSelectMode(null);
+  });
+
   // ---------- 여행 카드 (여행별 / 연도별 공용) ----------
+  var openTripIds = {};      // 다시 그려도 펼친 카드는 펼친 채로
+  var editDateByTrip = {};   // 카드마다 마지막으로 고른 날짜
+
+  function datesBetween(start, end) {
+    var out = [];
+    if (!start) return out;
+    var d = strToDate(start);
+    var last = strToDate(end || start);
+    while (d <= last && out.length < 92) {
+      out.push(dateToStr(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+
+  function makeField(labelText, inputEl) {
+    var f = document.createElement("div");
+    f.className = "field";
+    var l = document.createElement("label");
+    l.textContent = labelText;
+    f.appendChild(l);
+    f.appendChild(inputEl);
+    return f;
+  }
+
+  function makeInput(type, value) {
+    var el = document.createElement(type === "textarea" ? "textarea" : "input");
+    if (type !== "textarea") el.type = type;
+    el.value = value || "";
+    if (type === "textarea") el.rows = 3;
+    return el;
+  }
+
   function buildTripCardEl(trip) {
     var card = document.createElement("div");
-    card.className = "trip-card";
+    card.className = "trip-card" + (selectMode === "trips" && selected[trip.id] ? " picked" : "");
 
     var head = document.createElement("div");
-    head.className = "trip-head";
+    head.className = "trip-head pick-row";
+    var box = document.createElement("span");
+    box.className = "pick-box";
+    box.textContent = "✓";
+    head.appendChild(box);
     var place = document.createElement("div");
-    place.className = "trip-place";
+    place.className = "trip-place pick-main";
     place.textContent = trip.place;
     var dates = document.createElement("div");
     dates.className = "trip-dates";
@@ -457,47 +569,132 @@
     var toggleBtn = document.createElement("button");
     toggleBtn.className = "link";
     toggleBtn.type = "button";
-    toggleBtn.textContent = "자세히 보기";
-    var delBtn = document.createElement("button");
-    delBtn.className = "danger";
-    delBtn.type = "button";
-    delBtn.textContent = "여행 삭제";
     foot.appendChild(toggleBtn);
-    foot.appendChild(delBtn);
     card.appendChild(foot);
 
     var detail = document.createElement("div");
     detail.className = "trip-detail";
 
-    var retroLabel = document.createElement("label");
-    retroLabel.style.cssText = "display:block;font-size:0.8em;color:var(--muted);margin-bottom:4px;";
-    retroLabel.textContent = "전체 소회";
-    detail.appendChild(retroLabel);
+    // --- 여행 정보 수정 ---
+    var infoSec = document.createElement("div");
+    infoSec.className = "trip-section";
+    var infoTitle = document.createElement("div");
+    infoTitle.className = "trip-section-title";
+    infoTitle.textContent = "여행 정보";
+    infoSec.appendChild(infoTitle);
 
-    var retroInput = document.createElement("textarea");
-    retroInput.value = trip.retro || "";
-    detail.appendChild(retroInput);
+    var placeIn = makeInput("text", trip.place);
+    var startIn = makeInput("date", trip.startDate);
+    var endIn = makeInput("date", trip.endDate || trip.startDate);
+    var retroIn = makeInput("textarea", trip.retro);
+    infoSec.appendChild(makeField("여행지", placeIn));
+    var twoCol = document.createElement("div");
+    twoCol.className = "two-col";
+    twoCol.appendChild(makeField("시작일", startIn));
+    twoCol.appendChild(makeField("종료일", endIn));
+    infoSec.appendChild(twoCol);
+    infoSec.appendChild(makeField("전체 소회", retroIn));
 
-    var retroSaveBtn = document.createElement("button");
-    retroSaveBtn.className = "secondary";
-    retroSaveBtn.type = "button";
-    retroSaveBtn.style.marginTop = "6px";
-    retroSaveBtn.textContent = "소회 저장";
-    retroSaveBtn.addEventListener("click", function () {
-      trip.retro = retroInput.value.trim();
+    var infoSaveBtn = document.createElement("button");
+    infoSaveBtn.className = "secondary";
+    infoSaveBtn.type = "button";
+    infoSaveBtn.textContent = "여행 정보 저장";
+    infoSaveBtn.addEventListener("click", function () {
+      var p = placeIn.value.trim();
+      var s = startIn.value;
+      var e = endIn.value || s;
+      if (!p) { alert("여행지를 입력해주세요."); return; }
+      if (!s) { alert("시작일을 입력해주세요."); return; }
+      if (e < s) { var tmp = s; s = e; e = tmp; }
+      trip.place = p;
+      trip.startDate = s;
+      trip.endDate = e;
+      trip.retro = retroIn.value.trim();
       saveTrips();
-      retroEl.textContent = trip.retro ? trip.retro : "아직 소회를 남기지 않았어요. 눌러서 적어보기.";
-      retroEl.className = "trip-retro" + (trip.retro ? "" : " placeholder");
-      showToast("소회를 저장했습니다");
+      renderAll();
+      showToast("여행 정보를 저장했습니다");
     });
-    detail.appendChild(retroSaveBtn);
+    infoSec.appendChild(infoSaveBtn);
+    detail.appendChild(infoSec);
 
+    // --- 그날의 기록 쓰기/수정 ---
+    var daySec = document.createElement("div");
+    daySec.className = "trip-section";
+    var dayTitle = document.createElement("div");
+    dayTitle.className = "trip-section-title";
+    dayTitle.textContent = "그날의 기록";
+    daySec.appendChild(dayTitle);
+
+    var entryByDate = {};
+    tripEntries.forEach(function (en) { entryByDate[en.date] = en; });
+    var dayList = datesBetween(trip.startDate, trip.endDate);
+    tripEntries.forEach(function (en) { if (dayList.indexOf(en.date) === -1) dayList.push(en.date); });
+    dayList.sort();
+
+    var dateSel = document.createElement("select");
+    dayList.forEach(function (d, i) {
+      var opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = (i + 1) + "일차 · " + d + (entryByDate[d] ? "  ✓" : "");
+      dateSel.appendChild(opt);
+    });
+    daySec.appendChild(makeField("날짜 (✓ = 이미 쓴 날)", dateSel));
+
+    var discIn = makeInput("textarea");
+    var connIn = makeInput("textarea");
+    var selfIn = makeInput("textarea");
+    var sumIn = makeInput("textarea");
+    daySec.appendChild(makeField("여행의 발견 — 새롭게 발견한 장소와 경험", discIn));
+    daySec.appendChild(makeField("연결된 것 — 사람이나 세상과 온기를 나눈 순간", connIn));
+    daySec.appendChild(makeField("나의 재발견 — 나에 대해 더 알게 된 모습", selfIn));
+    daySec.appendChild(makeField("종합소감", sumIn));
+
+    var daysWrap = document.createElement("div");
+
+    function loadDay(d) {
+      dateSel.value = d;
+      editDateByTrip[trip.id] = d;
+      var en = entryByDate[d];
+      discIn.value = en ? (en.discovery || "") : "";
+      connIn.value = en ? (en.connection || "") : "";
+      selfIn.value = en ? (en.selfDiscovery || "") : "";
+      sumIn.value = en ? (en.summary || "") : "";
+      daysWrap.querySelectorAll(".trip-day").forEach(function (el) {
+        el.classList.toggle("editing", el.dataset.date === d);
+      });
+    }
+    dateSel.addEventListener("change", function () { loadDay(dateSel.value); });
+
+    var daySaveBtn = document.createElement("button");
+    daySaveBtn.className = "secondary";
+    daySaveBtn.type = "button";
+    daySaveBtn.textContent = "이 날 기록 저장";
+    daySaveBtn.addEventListener("click", function () {
+      if (!dateSel.value) { alert("날짜를 선택해주세요."); return; }
+      upsertEntry(trip.id, dateSel.value, {
+        discovery: discIn.value.trim(),
+        connection: connIn.value.trim(),
+        selfDiscovery: selfIn.value.trim(),
+        summary: sumIn.value.trim()
+      });
+      renderAll();
+      showToast(dateSel.value + " 기록을 저장했습니다");
+    });
+    daySec.appendChild(daySaveBtn);
+    detail.appendChild(daySec);
+
+    // --- 쓴 기록 모아보기 (누르면 위 폼으로 불러옴) ---
     if (tripEntries.length) {
-      var daysWrap = document.createElement("div");
-      daysWrap.style.marginTop = "12px";
-      tripEntries.forEach(function (entry) {
+      var listSec = document.createElement("div");
+      listSec.className = "trip-section";
+      var listTitle = document.createElement("div");
+      listTitle.className = "trip-section-title";
+      listTitle.textContent = "쓴 기록 (눌러서 수정)";
+      listSec.appendChild(listTitle);
+      tripEntries.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (entry) {
         var day = document.createElement("div");
-        day.className = "trip-day";
+        day.className = "trip-day clickable";
+        day.dataset.date = entry.date;
         var dateEl = document.createElement("div");
         dateEl.className = "trip-day-date";
         dateEl.textContent = entry.date;
@@ -512,27 +709,42 @@
             day.appendChild(f);
           });
 
+        day.addEventListener("click", function () {
+          loadDay(entry.date);
+          daySec.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
         daysWrap.appendChild(day);
       });
-      detail.appendChild(daysWrap);
+      listSec.appendChild(daysWrap);
+      detail.appendChild(listSec);
     }
 
     card.appendChild(detail);
 
-    toggleBtn.addEventListener("click", function () {
-      detail.classList.toggle("show");
-      toggleBtn.textContent = detail.classList.contains("show") ? "접기" : "자세히 보기";
-    });
+    // 처음 열 때는 아직 안 쓴 첫날 (다 썼으면 첫날)
+    var firstDay = editDateByTrip[trip.id];
+    if (!firstDay || dayList.indexOf(firstDay) === -1) {
+      firstDay = dayList.find(function (d) { return !entryByDate[d]; }) || dayList[0];
+    }
+    if (firstDay) loadDay(firstDay);
 
-    delBtn.addEventListener("click", function () {
-      if (!confirm(trip.place + " 여행을 삭제할까요? (그 여행의 모든 기록도 함께 삭제됩니다)")) return;
-      trips = trips.filter(function (t) { return t.id !== trip.id; });
-      entries = entries.filter(function (e) { return e.tripId !== trip.id; });
-      saveTrips();
-      saveEntries();
-      if (activeTripId === trip.id) setActiveTripId(null);
-      renderAll();
-      showToast("여행을 삭제했습니다");
+    function setOpen(open) {
+      openTripIds[trip.id] = open;
+      detail.classList.toggle("show", open);
+      toggleBtn.textContent = open ? "접기" : "✏️ 열어서 쓰기 / 수정";
+    }
+    setOpen(!!openTripIds[trip.id]);
+
+    toggleBtn.addEventListener("click", function () { setOpen(!detail.classList.contains("show")); });
+    retroEl.addEventListener("click", function () {
+      if (selectMode) return;
+      setOpen(true);
+      retroIn.focus();
+    });
+    card.addEventListener("click", function (ev) {
+      if (selectMode !== "trips") return;
+      ev.stopPropagation();
+      togglePick(trip.id, card);
     });
 
     return card;

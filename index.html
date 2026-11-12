@@ -116,6 +116,49 @@
   .trip-day .trip-day-date { font-weight: 700; margin-bottom: 4px; }
   .trip-day .trip-day-field { color: var(--muted); margin-bottom: 2px; }
   .trip-day .trip-day-field b { color: var(--text); font-weight: 600; }
+  .trip-day.clickable { cursor: pointer; }
+  .trip-day.editing { background: rgba(74,144,217,0.12); border-radius: 8px; padding: 8px; }
+
+  /* 여행 카드 안 수정 폼 */
+  .trip-detail .field input[type="text"],
+  .trip-detail .field input[type="date"],
+  .trip-detail .field select,
+  .trip-detail .field textarea { background: var(--card); }
+  .trip-section-title { font-size: 0.85em; font-weight: 800; color: var(--accent); margin: 4px 0 8px; }
+  .trip-section + .trip-section { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .trip-section button.secondary { width: 100%; }
+
+  /* 휴지통 / 선택 삭제 */
+  .card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .card-title-row h2 { margin: 0; }
+  .trash-btn {
+    background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 5px 10px; font-size: 1em; line-height: 1;
+  }
+  .trash-btn.active { background: #3a1c1e; border-color: var(--warn); }
+  .pick-box {
+    display: none; width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+    border: 2px solid var(--muted); margin-right: 10px;
+    align-items: center; justify-content: center; font-size: 0.8em; font-weight: 800; color: #fff;
+  }
+  .select-mode .pick-box { display: inline-flex; }
+  .picked .pick-box { background: var(--warn); border-color: var(--warn); }
+  .select-mode .trip-card, .select-mode .entry-item { cursor: pointer; }
+  .trip-card.picked, .entry-item.picked { box-shadow: inset 0 0 0 2px var(--warn); }
+  .select-mode .trip-foot, .select-mode .trip-detail { display: none !important; }
+  .pick-row { display: flex; align-items: center; }
+  .pick-row > .pick-main { flex: 1; min-width: 0; }
+  .delete-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: none; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: #1a1d23; border-top: 1px solid var(--line);
+  }
+  .delete-bar.show { display: flex; }
+  .delete-bar button { flex: 1; padding: 13px; border-radius: 10px; font-weight: 700; font-size: 0.95em; }
+  .delete-bar .del-go { background: var(--warn); color: #fff; border: none; }
+  .delete-bar .del-go:disabled { opacity: 0.4; }
+  .delete-bar .del-cancel { background: var(--card2); color: var(--text); border: 1px solid var(--line); }
+  body.has-delete-bar { padding-bottom: 90px; }
 
   .year-group { margin-bottom: 18px; }
   .year-group:last-child { margin-bottom: 0; }
@@ -266,7 +309,10 @@
 </div>
 
 <div class="card" id="entryListCard" style="display:none;">
-  <h2>이 여행의 기록</h2>
+  <div class="card-title-row">
+    <h2>이 여행의 기록</h2>
+    <button type="button" class="trash-btn" data-select="entries" title="기록 삭제">🗑</button>
+  </div>
   <div id="entryList"></div>
 </div>
 
@@ -274,14 +320,20 @@
 
 <section id="tab-bytrip" class="tab-panel">
 <div class="card">
-  <h2>여행별 모아보기</h2>
+  <div class="card-title-row">
+    <h2>여행별 모아보기</h2>
+    <button type="button" class="trash-btn" data-select="trips" title="여행 삭제">🗑</button>
+  </div>
   <div id="tripListByTrip"></div>
 </div>
 </section>
 
 <section id="tab-byyear" class="tab-panel">
 <div class="card">
-  <h2>연도별 모아보기</h2>
+  <div class="card-title-row">
+    <h2>연도별 모아보기</h2>
+    <button type="button" class="trash-btn" data-select="trips" title="여행 삭제">🗑</button>
+  </div>
   <div id="tripListByYear"></div>
 </div>
 </section>
@@ -294,6 +346,11 @@
     <button class="secondary" type="button" id="importBtn">📥 가져오기 (JSON)</button>
   </div>
   <input type="file" id="importFile" accept="application/json">
+</div>
+
+<div class="delete-bar" id="deleteBar">
+  <button type="button" class="del-cancel" id="deleteCancelBtn">취소</button>
+  <button type="button" class="del-go" id="deleteGoBtn" disabled>선택한 0개 삭제</button>
 </div>
 
 <div class="toast" id="toast"></div>
