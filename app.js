@@ -237,10 +237,52 @@
     renderNtCalendar();
   });
 
+  // 한 달씩 ◀▶로 넘기는 건 몇 년 전 여행까지 가려면 너무 느려서(관리자님 리포트,
+  // 2026-11-12 - "년도 선택이 안돼 월도 그렇고 하나씩 넘기고 있어야되는데"), 달력
+  // 제목을 누르면 연도/월을 바로 고를 수 있는 선택칸이 나오게 한다.
+  var ntYearSelect = document.getElementById("ntYearSelect");
+  var ntMonthSelect = document.getElementById("ntMonthSelect");
+  var ntCalJump = document.getElementById("ntCalJump");
+
+  function populateNtJumpSelects() {
+    var curY = ntCalCursor.getFullYear();
+    var thisY = new Date().getFullYear();
+    ntYearSelect.innerHTML = "";
+    for (var y = thisY + 1; y >= thisY - 20; y--) {
+      var opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y + "년";
+      if (y === curY) opt.selected = true;
+      ntYearSelect.appendChild(opt);
+    }
+    var curM = ntCalCursor.getMonth();
+    ntMonthSelect.innerHTML = "";
+    for (var m = 0; m < 12; m++) {
+      var mopt = document.createElement("option");
+      mopt.value = m;
+      mopt.textContent = (m + 1) + "월";
+      if (m === curM) mopt.selected = true;
+      ntMonthSelect.appendChild(mopt);
+    }
+  }
+
+  document.getElementById("ntCalTitle").addEventListener("click", function () {
+    populateNtJumpSelects();
+    ntCalJump.classList.toggle("show");
+  });
+
+  function jumpNtCalFromSelects() {
+    ntCalCursor = new Date(parseInt(ntYearSelect.value, 10), parseInt(ntMonthSelect.value, 10), 1);
+    renderNtCalendar();
+  }
+  ntYearSelect.addEventListener("change", jumpNtCalFromSelects);
+  ntMonthSelect.addEventListener("change", jumpNtCalFromSelects);
+
   function resetNtDateRange() {
     ntRangeStart = null;
     ntRangeEnd = null;
     ntCalCursor = new Date();
+    ntCalJump.classList.remove("show");
     renderNtCalendar();
     renderNtRangeReadout();
   }

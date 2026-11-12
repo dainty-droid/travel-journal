@@ -139,7 +139,16 @@
     background: var(--card); border: none; color: var(--text);
     border-radius: 8px; padding: 6px 12px; font-size: 1em;
   }
-  .cal-title { font-weight: 700; font-size: 0.9em; }
+  .cal-title {
+    font-weight: 700; font-size: 0.9em; color: var(--text);
+    border-radius: 8px; padding: 6px 10px;
+  }
+  .cal-jump { display: none; gap: 8px; margin-bottom: 8px; }
+  .cal-jump.show { display: flex; }
+  .cal-jump select {
+    flex: 1; background: var(--card); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px; font-size: 0.85em; font-family: inherit;
+  }
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .cal-dow { text-align: center; font-size: 0.68em; color: var(--muted); padding-bottom: 4px; }
   .cal-day {
@@ -208,8 +217,12 @@
       <label>여행 기간 <span style="color:var(--muted); font-weight:400;">— 시작일 찍고 종료일 찍기 (하루면 한 번만)</span></label>
       <div class="cal-head">
         <button type="button" id="ntPrevMonth">◀</button>
-        <div class="cal-title" id="ntCalTitle"></div>
+        <button type="button" class="cal-title" id="ntCalTitle"></button>
         <button type="button" id="ntNextMonth">▶</button>
+      </div>
+      <div class="cal-jump" id="ntCalJump">
+        <select id="ntYearSelect"></select>
+        <select id="ntMonthSelect"></select>
       </div>
       <div class="cal-grid" id="ntCalDow"></div>
       <div class="cal-grid" id="ntCalGrid"></div>
