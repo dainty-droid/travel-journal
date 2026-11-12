@@ -1,13 +1,13 @@
 // 아주 단순한 캐시-우선 서비스워커 - 오프라인에서도 앱이 열리게 하는 용도.
 // 데이터는 전부 localStorage에 있으므로 여기서 캐시하는 건 앱 껍데기(HTML/JS/매니페스트/아이콘)뿐이다.
-var CACHE_NAME = "hangjeok-v3";
+var CACHE_NAME = "hangjeok-v4";
 var ASSETS = [
   "./",
   "./index.html",
   "./app.js",
   "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./icon-plane-192.png",
+  "./icon-plane-512.png"
 ];
 
 self.addEventListener("install", function (event) {
