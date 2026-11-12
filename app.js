@@ -566,6 +566,252 @@
     return el;
   }
 
+  // ---------- 사진 폴더 (APK 전용: GalleryPlugin) ----------
+  var PHOTO_PAGE = 30;
+  var thumbCache = {};      // "크기|uri" -> data URL
+  var albumCache = {};      // 버킷 id -> { total, items: [{uri, date}], loading: Promise }
+
+  function galleryPlugin() {
+    return isNativeApp() && window.Capacitor.Plugins ? window.Capacitor.Plugins.Gallery : null;
+  }
+
+  function ensurePhotoPermission() {
+    return galleryPlugin().ensurePermission().then(function (r) {
+      if (!r.granted) {
+        throw new Error("사진 접근 권한이 없어요.\n설정 → 애플리케이션 → 항적 → 권한 → '사진 및 동영상'을 '모두 허용'으로 바꿔주세요.");
+      }
+    });
+  }
+
+  function loadThumbs(uris, size) {
+    var need = uris.filter(function (u) { return !thumbCache[size + "|" + u]; });
+    if (!need.length) return Promise.resolve();
+    return galleryPlugin().thumbnails({ uris: need, size: size }).then(function (res) {
+      Object.keys(res.thumbs || {}).forEach(function (u) { thumbCache[size + "|" + u] = res.thumbs[u]; });
+    });
+  }
+
+  // 폴더 사진을 다음 페이지만큼 더 불러온다 (같은 폴더를 동시에 두 번 부르지 않게 loading 공유)
+  function loadAlbumPage(bucketId) {
+    var a = albumCache[bucketId] || (albumCache[bucketId] = { total: null, items: [], loading: null });
+    if (a.loading) return a.loading;
+    if (a.total !== null && a.items.length >= a.total) return Promise.resolve(a);
+    a.loading = galleryPlugin().listPhotos({ bucketId: bucketId, offset: a.items.length, limit: PHOTO_PAGE })
+      .then(function (res) {
+        a.total = res.total;
+        a.items = a.items.concat(res.photos || []);
+        return loadThumbs((res.photos || []).map(function (p) { return p.uri; }), 240);
+      })
+      .then(function () { a.loading = null; return a; }, function (e) { a.loading = null; throw e; });
+    return a.loading;
+  }
+
+  function closeOverlay(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+
+  function openAlbumPicker(trip) {
+    ensurePhotoPermission()
+      .then(function () { return galleryPlugin().listAlbums(); })
+      .then(function (res) {
+        var albums = res.albums || [];
+        var ov = document.createElement("div");
+        ov.className = "ov";
+        ov.innerHTML = '<div class="ov-panel"><h3><span>사진 폴더 고르기</span><button type="button">✕</button></h3>' +
+          '<input type="text" placeholder="폴더 이름 검색 (예: 파타야)"><div class="album-list"></div></div>';
+        var list = ov.querySelector(".album-list");
+        var search = ov.querySelector("input");
+        ov.querySelector("h3 button").addEventListener("click", function () { closeOverlay(ov); });
+        ov.addEventListener("click", function (ev) { if (ev.target === ov) closeOverlay(ov); });
+
+        function draw() {
+          var q = search.value.trim().toLowerCase();
+          list.innerHTML = "";
+          albums.filter(function (a) { return !q || a.name.toLowerCase().indexOf(q) !== -1; }).forEach(function (a) {
+            var row = document.createElement("div");
+            row.className = "album-row";
+            row.innerHTML = '<div class="album-cover"></div><div class="album-name"></div><div class="album-count"></div>';
+            row.querySelector(".album-name").textContent = a.name;
+            row.querySelector(".album-count").textContent = a.count + "장";
+            var cov = thumbCache["160|" + a.cover];
+            if (cov) row.querySelector(".album-cover").style.backgroundImage = "url(" + cov + ")";
+            row.addEventListener("click", function () {
+              trip.photoAlbum = { id: a.id, name: a.name };
+              saveTrips();
+              closeOverlay(ov);
+              renderAll();
+              showToast("'" + a.name + "' 폴더를 연결했습니다");
+            });
+            list.appendChild(row);
+          });
+          if (!list.children.length) list.innerHTML = '<div class="photo-note">맞는 폴더가 없어요.</div>';
+        }
+        search.addEventListener("input", draw);
+        document.body.appendChild(ov);
+        draw();
+        // 대표 사진은 나중에 채움
+        loadThumbs(albums.map(function (a) { return a.cover; }), 160).then(function () { if (ov.parentNode) draw(); });
+      })
+      .catch(function (e) { alert(e.message || e); });
+  }
+
+  function openViewer(bucketId, index) {
+    var a = albumCache[bucketId];
+    if (!a || !a.items.length) return;
+    var cur = index;
+    var v = document.createElement("div");
+    v.className = "viewer";
+    v.innerHTML = '<div class="viewer-top"><span class="vw-count"></span><button type="button" class="vw-close">닫기</button></div>' +
+      '<div class="viewer-img"><img alt=""></div>' +
+      '<div class="viewer-bottom"><button type="button" class="vw-prev">◀</button>' +
+      '<button type="button" class="vw-gallery">갤러리에서 열기</button><button type="button" class="vw-next">▶</button></div>';
+    var img = v.querySelector("img");
+
+    function show() {
+      var p = a.items[cur];
+      v.querySelector(".vw-count").textContent = (cur + 1) + " / " + a.total;
+      img.src = thumbCache["240|" + p.uri] || "";
+      loadThumbs([p.uri], 1600).then(function () {
+        if (a.items[cur] === p) img.src = thumbCache["1600|" + p.uri] || img.src;
+      });
+    }
+    function go(d) {
+      var n = cur + d;
+      if (n < 0) return;
+      if (n >= a.items.length) {
+        if (a.items.length >= a.total) return;
+        loadAlbumPage(bucketId).then(function () { if (n < a.items.length) { cur = n; show(); } });
+        return;
+      }
+      cur = n;
+      show();
+    }
+    v.querySelector(".vw-close").addEventListener("click", function () { closeOverlay(v); });
+    v.querySelector(".vw-prev").addEventListener("click", function () { go(-1); });
+    v.querySelector(".vw-next").addEventListener("click", function () { go(1); });
+    v.querySelector(".vw-gallery").addEventListener("click", function () {
+      galleryPlugin().open({ uri: a.items[cur].uri }).catch(function (e) { alert(e.message || e); });
+    });
+    var sx = null;
+    var area = v.querySelector(".viewer-img");
+    area.addEventListener("touchstart", function (ev) { sx = ev.touches[0].clientX; }, { passive: true });
+    area.addEventListener("touchend", function (ev) {
+      if (sx === null) return;
+      var dx = ev.changedTouches[0].clientX - sx;
+      sx = null;
+      if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
+    });
+    document.body.appendChild(v);
+    show();
+  }
+
+  // 여행 카드 안 '사진' 칸. 카드를 펼칠 때(activate) 실제로 사진을 불러온다.
+  function buildPhotoSection(trip) {
+    var sec = document.createElement("div");
+    sec.className = "trip-section";
+    var title = document.createElement("div");
+    title.className = "trip-section-title";
+    title.textContent = "사진";
+    sec.appendChild(title);
+    var body = document.createElement("div");
+    sec.appendChild(body);
+    var activated = false;
+
+    function drawEmpty() {
+      body.innerHTML = "";
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "secondary";
+      btn.style.width = "100%";
+      btn.textContent = "📷 사진 폴더 연결";
+      btn.addEventListener("click", function () { openAlbumPicker(trip); });
+      body.appendChild(btn);
+    }
+
+    function drawAlbum() {
+      var alb = trip.photoAlbum;
+      var a = albumCache[alb.id];
+      body.innerHTML = "";
+      var head = document.createElement("div");
+      head.className = "photo-head";
+      head.innerHTML = '<span class="ph-name"></span><span class="ph-btns">' +
+        '<button type="button" class="secondary ph-change">바꾸기</button>' +
+        '<button type="button" class="secondary ph-unlink">연결 해제</button></span>';
+      head.querySelector(".ph-name").textContent = "📁 " + alb.name + (a && a.total !== null ? " · " + a.total + "장" : "");
+      head.querySelector(".ph-change").addEventListener("click", function () { openAlbumPicker(trip); });
+      head.querySelector(".ph-unlink").addEventListener("click", function () {
+        if (!confirm("'" + alb.name + "' 폴더 연결을 해제할까요?\n(갤러리의 사진은 지워지지 않아요)")) return;
+        delete trip.photoAlbum;
+        saveTrips();
+        renderAll();
+      });
+      body.appendChild(head);
+
+      if (!a || a.total === null) {
+        body.insertAdjacentHTML("beforeend", '<div class="photo-note">사진 불러오는 중…</div>');
+        return;
+      }
+      if (!a.total) {
+        body.insertAdjacentHTML("beforeend", '<div class="photo-note">이 폴더에 사진이 없어요. (폴더가 바뀌었으면 \'바꾸기\')</div>');
+        return;
+      }
+      var grid = document.createElement("div");
+      grid.className = "photo-grid";
+      a.items.forEach(function (p, i) {
+        var cell = document.createElement("div");
+        cell.className = "ph-cell";
+        var t = thumbCache["240|" + p.uri];
+        if (t) cell.style.backgroundImage = "url(" + t + ")";
+        cell.addEventListener("click", function () { openViewer(alb.id, i); });
+        grid.appendChild(cell);
+      });
+      body.appendChild(grid);
+      if (a.items.length < a.total) {
+        var more = document.createElement("button");
+        more.type = "button";
+        more.className = "secondary photo-more";
+        more.textContent = "사진 더 보기 (" + a.items.length + " / " + a.total + ")";
+        more.addEventListener("click", function () {
+          more.disabled = true;
+          more.textContent = "불러오는 중…";
+          loadAlbumPage(alb.id).then(drawAlbum, function (e) { alert(e.message || e); drawAlbum(); });
+        });
+        body.appendChild(more);
+      }
+    }
+
+    function activate() {
+      if (activated) return;
+      activated = true;
+      if (!trip.photoAlbum) { drawEmpty(); return; }
+      drawAlbum();
+      var a = albumCache[trip.photoAlbum.id];
+      if (a && a.total !== null) return;
+      ensurePhotoPermission()
+        .then(function () { return loadAlbumPage(trip.photoAlbum.id); })
+        .then(function (a) {
+          if (a.total) return;
+          // 폰을 바꾸면 폴더 id가 달라질 수 있어서, 같은 이름의 폴더를 찾아 다시 연결
+          return galleryPlugin().listAlbums().then(function (res) {
+            var same = (res.albums || []).find(function (x) { return x.name === trip.photoAlbum.name && x.id !== trip.photoAlbum.id; });
+            if (!same) return;
+            delete albumCache[trip.photoAlbum.id];
+            trip.photoAlbum.id = same.id;
+            saveTrips();
+            return loadAlbumPage(same.id);
+          });
+        })
+        .then(drawAlbum)
+        .catch(function (e) {
+          body.innerHTML = "";
+          body.insertAdjacentHTML("beforeend", '<div class="photo-note"></div>');
+          body.querySelector(".photo-note").textContent = e.message || String(e);
+        });
+    }
+
+    if (!trip.photoAlbum) drawEmpty();
+    else body.innerHTML = '<div class="photo-note">📁 ' + trip.photoAlbum.name.replace(/</g, "&lt;") + '</div>';
+    return { el: sec, activate: activate };
+  }
+
   var editExpenseIdByTrip = {}; // 카드마다 수정 중인 경비 항목
 
   function buildExpenseSection(trip) {
@@ -845,6 +1091,10 @@
 
     detail.appendChild(buildExpenseSection(trip));
 
+    // 사진 칸은 APK에서만 (웹에서는 갤러리를 못 읽음)
+    var photoSec = galleryPlugin() ? buildPhotoSection(trip) : null;
+    if (photoSec) detail.appendChild(photoSec.el);
+
     // --- 그날의 기록 쓰기/수정 ---
     var daySec = document.createElement("div");
     daySec.className = "trip-section";
@@ -959,6 +1209,7 @@
     function setOpen(open) {
       openTripIds[trip.id] = open;
       detail.classList.toggle("show", open);
+      if (open && photoSec) photoSec.activate();
       toggleBtn.textContent = open ? "접기" : "✏️ 열어서 쓰기 / 수정";
     }
     setOpen(!!openTripIds[trip.id]);
@@ -1227,7 +1478,7 @@
           if (!t.id) t.id = uid();
           var cur = tripById[t.id];
           if (!cur) { tripById[t.id] = t; return; }
-          ["place", "startDate", "endDate", "retro"].forEach(function (k) {
+          ["place", "startDate", "endDate", "retro", "photoAlbum"].forEach(function (k) {
             if (t[k]) cur[k] = t[k];
           });
           var expById = {};

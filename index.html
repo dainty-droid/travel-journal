@@ -182,6 +182,52 @@
   .year-title small { font-size: 0.65em; color: var(--muted); font-weight: 600; margin-left: 6px; }
   .year-title small.over { color: var(--warn); }
 
+  /* 사진 폴더 (APK) */
+  .photo-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.85em; margin-bottom: 8px; }
+  .photo-head .ph-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .photo-head .ph-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .photo-head .ph-btns button { padding: 6px 10px; font-size: 0.8em; }
+  .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .photo-grid .ph-cell {
+    aspect-ratio: 1; border-radius: 6px; background: var(--card) center / cover no-repeat;
+    cursor: pointer;
+  }
+  .photo-more { width: 100%; margin-top: 8px; }
+  .photo-note { font-size: 0.78em; color: var(--muted); text-align: center; padding: 6px 0; }
+
+  .ov {
+    position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.75);
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .ov-panel {
+    background: var(--card); width: 100%; max-height: 82vh; border-radius: 16px 16px 0 0;
+    display: flex; flex-direction: column; padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  }
+  .ov-panel h3 { margin: 0 0 10px; font-size: 1em; display: flex; justify-content: space-between; align-items: center; }
+  .ov-panel h3 button { background: none; border: none; color: var(--muted); font-size: 1.2em; }
+  .ov-panel input[type="text"] {
+    width: 100%; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 10px; font-size: 0.95em; font-family: inherit; margin-bottom: 10px;
+  }
+  .album-list { overflow-y: auto; flex: 1; }
+  .album-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer;
+  }
+  .album-row:active { background: var(--card2); }
+  .album-cover { width: 52px; height: 52px; border-radius: 8px; background: var(--card2) center / cover no-repeat; flex-shrink: 0; }
+  .album-name { flex: 1; min-width: 0; font-weight: 700; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .album-count { color: var(--muted); font-size: 0.8em; }
+
+  .viewer { position: fixed; inset: 0; z-index: 40; background: #000; display: flex; flex-direction: column; }
+  .viewer-top, .viewer-bottom {
+    display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; color: #fff; font-size: 0.85em;
+  }
+  .viewer-top { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .viewer-bottom { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .viewer button { background: rgba(255,255,255,0.12); color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 0.95em; }
+  .viewer-img { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: pan-y; }
+  .viewer-img img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
   /* 휴지통 / 선택 삭제 */
   .card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .card-title-row h2 { margin: 0; }
