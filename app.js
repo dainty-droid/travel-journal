@@ -635,6 +635,7 @@
             if (cov) row.querySelector(".album-cover").style.backgroundImage = "url(" + cov + ")";
             row.addEventListener("click", function () {
               trip.photoAlbum = { id: a.id, name: a.name };
+              photoOpenByTrip[trip.id] = true; // 방금 연결한 폴더는 펼쳐서 보여줌
               saveTrips();
               closeOverlay(ov);
               renderAll();
@@ -703,17 +704,33 @@
     show();
   }
 
-  // 여행 카드 안 '사진' 칸. 카드를 펼칠 때(activate) 실제로 사진을 불러온다.
+  var photoOpenByTrip = {}; // 사진 칸 펼침 여부 (기본 접힘)
+
+  // 여행 카드 안 '사진' 칸. 카드를 펼치고(activate) 사진 칸도 펼쳐져 있을 때만 실제로 사진을 불러온다.
   function buildPhotoSection(trip) {
     var sec = document.createElement("div");
     sec.className = "trip-section";
     var title = document.createElement("div");
-    title.className = "trip-section-title";
-    title.textContent = "사진";
+    title.className = "trip-section-title photo-toggle";
     sec.appendChild(title);
     var body = document.createElement("div");
     sec.appendChild(body);
     var activated = false;
+    var cardOpen = false;
+
+    function drawTitle() {
+      if (!trip.photoAlbum) { title.textContent = "사진"; return; }
+      var a = albumCache[trip.photoAlbum.id];
+      title.textContent = (photoOpenByTrip[trip.id] ? "▾ " : "▸ ") + "사진 · 📁 " + trip.photoAlbum.name +
+        (a && a.total !== null ? " · " + a.total + "장" : "") + (photoOpenByTrip[trip.id] ? "" : "  (눌러서 펼치기)");
+    }
+    title.addEventListener("click", function () {
+      if (!trip.photoAlbum) return;
+      photoOpenByTrip[trip.id] = !photoOpenByTrip[trip.id];
+      drawTitle();
+      body.style.display = photoOpenByTrip[trip.id] ? "" : "none";
+      if (photoOpenByTrip[trip.id] && cardOpen) load();
+    });
 
     function drawEmpty() {
       body.innerHTML = "";
@@ -729,6 +746,7 @@
     function drawAlbum() {
       var alb = trip.photoAlbum;
       var a = albumCache[alb.id];
+      drawTitle();
       body.innerHTML = "";
       var head = document.createElement("div");
       head.className = "photo-head";
@@ -779,6 +797,11 @@
     }
 
     function activate() {
+      cardOpen = true;
+      if (photoOpenByTrip[trip.id]) load();
+    }
+
+    function load() {
       if (activated) return;
       activated = true;
       if (!trip.photoAlbum) { drawEmpty(); return; }
@@ -807,8 +830,12 @@
         });
     }
 
+    drawTitle();
     if (!trip.photoAlbum) drawEmpty();
-    else body.innerHTML = '<div class="photo-note">📁 ' + trip.photoAlbum.name.replace(/</g, "&lt;") + '</div>';
+    else {
+      body.innerHTML = '<div class="photo-note">사진 불러오는 중…</div>';
+      body.style.display = photoOpenByTrip[trip.id] ? "" : "none";
+    }
     return { el: sec, activate: activate };
   }
 
