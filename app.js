@@ -1464,7 +1464,7 @@
   }
 
   function exportAll() {
-    var data = { trips: trips, entries: entries };
+    var data = { trips: trips, entries: entries, packTemplate: packTpl };
     if (isNativeApp()) { exportNative(data); return; }
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -1505,7 +1505,7 @@
           if (!t.id) t.id = uid();
           var cur = tripById[t.id];
           if (!cur) { tripById[t.id] = t; return; }
-          ["place", "startDate", "endDate", "retro", "photoAlbum"].forEach(function (k) {
+          ["place", "startDate", "endDate", "retro", "photoAlbum", "packing"].forEach(function (k) {
             if (t[k]) cur[k] = t[k];
           });
           var expById = {};
@@ -1523,6 +1523,7 @@
         });
         entries = Object.values(entryById);
 
+        if (Array.isArray(imported.packTemplate) && imported.packTemplate.length) { packTpl = imported.packTemplate; savePackTpl(); }
         saveTrips();
         saveEntries();
         renderAll();
@@ -1535,6 +1536,176 @@
     reader.readAsText(file);
   });
 
+  // ---------- 준비물 체크리스트 (2026-11-26) ----------
+  // 기본 템플릿(travelPackTemplate_v1)을 여행마다 복사해서 trip.packing = [{id,cat,text,done}] 으로 따로 관리.
+  // 여행 데이터 안에 들어가므로 백업/복원에 같이 실려 간다.
+  var PACK_TPL_KEY = "travelPackTemplate_v1";
+  var PACK_TRIP_KEY = "travelPackTrip_v1";
+  var PACK_CATS = ["📄 서류·예약", "💴 돈·통신", "🔌 전자기기", "💊 약", "🌊 물놀이·햇빛", "👕 옷·신발", "🧂 기념품·기타"];
+  var PACK_DEFAULT = [
+    ["📄 서류·예약", ["여권 (유효기간 확인)", "국제운전면허증", "한국 운전면허증", "항공권 확인", "숙소 예약 확인", "렌터카 예약 확인", "입국 서류 / QR 등록", "여행자보험"]],
+    ["💴 돈·통신", ["현지 화폐", "해외결제 카드", "eSIM / 로밍"]],
+    ["🔌 전자기기", ["충전기·케이블", "돼지코 어댑터", "보조배터리 (기내 반입)"]],
+    ["💊 약", ["혈압약 (넉넉하게)", "상비약 (소화제·진통제·밴드)"]],
+    ["🌊 물놀이·햇빛", ["선크림", "선글라스", "모자"]],
+    ["👕 옷·신발", ["옷", "속옷", "양말", "슬리퍼"]],
+    ["🧂 기념품·기타", ["지퍼백", "캐리어 저울", "천벡이 🧳", "책 📖"]]
+  ];
+  function loadPackTpl() {
+    var t = null;
+    try { var raw = localStorage.getItem(PACK_TPL_KEY); if (raw) t = JSON.parse(raw); } catch (e) {}
+    if (Array.isArray(t)) return t;
+    var out = [];
+    PACK_DEFAULT.forEach(function (g) { g[1].forEach(function (txt) { out.push({ id: uid(), cat: g[0], text: txt }); }); });
+    return out;
+  }
+  var packTpl = loadPackTpl();
+  function savePackTpl() { saveJson(PACK_TPL_KEY, packTpl); }
+  var packTripId = null;
+  try { packTripId = localStorage.getItem(PACK_TRIP_KEY) || null; } catch (e) {}
+
+  function packTrip() { return trips.find(function (t) { return t.id === packTripId; }) || null; }
+  function catOrder(c) { var i = PACK_CATS.indexOf(c); return i < 0 ? 99 : i; }
+  function fillCatSelect(sel) {
+    if (sel.options.length) return;
+    PACK_CATS.forEach(function (c) { var o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); });
+  }
+
+  // 항목 목록 그리기 (여행 리스트 / 템플릿 공용). withCheck=false면 템플릿(체크 없음)
+  function drawPackItems(container, items, withCheck, onChange) {
+    container.innerHTML = "";
+    var groups = {};
+    items.forEach(function (it) { (groups[it.cat] = groups[it.cat] || []).push(it); });
+    var cats = Object.keys(groups).sort(function (a, b) { return catOrder(a) - catOrder(b); });
+    if (!cats.length) {
+      var em = document.createElement("div"); em.className = "empty-note"; em.textContent = "항목이 없어요. 아래에서 추가해줘.";
+      container.appendChild(em); return;
+    }
+    cats.forEach(function (c) {
+      var h = document.createElement("div"); h.className = "pk-cat";
+      var gi = groups[c];
+      h.textContent = c + (withCheck ? "  " + gi.filter(function (x) { return x.done; }).length + "/" + gi.length : "");
+      container.appendChild(h);
+      gi.forEach(function (it) {
+        var row = document.createElement("div"); row.className = "pk-item" + (withCheck && it.done ? " done" : "");
+        var main = document.createElement(withCheck ? "button" : "div"); main.className = "pk-check";
+        if (withCheck) {
+          main.type = "button";
+          var box = document.createElement("span"); box.className = "pk-box"; box.textContent = it.done ? "✓" : "";
+          main.appendChild(box);
+          main.addEventListener("click", function () { it.done = !it.done; onChange(); });
+        }
+        var tx = document.createElement("span"); tx.className = "pk-text"; tx.textContent = it.text;
+        main.appendChild(tx);
+        row.appendChild(main);
+        var ed = document.createElement("button"); ed.type = "button"; ed.className = "pk-mini"; ed.textContent = "✎"; ed.title = "이름 수정";
+        ed.addEventListener("click", function () {
+          var v = prompt("항목 이름 수정", it.text);
+          if (v === null) return;
+          v = v.trim(); if (!v) return;
+          it.text = v; onChange();
+        });
+        row.appendChild(ed);
+        var del = document.createElement("button"); del.type = "button"; del.className = "pk-mini"; del.textContent = "✕"; del.title = "삭제";
+        del.addEventListener("click", function () {
+          if (!confirm("'" + it.text + "' 항목을 지울까요?")) return;
+          var i = items.indexOf(it); if (i >= 0) items.splice(i, 1);
+          onChange();
+        });
+        row.appendChild(del);
+        container.appendChild(row);
+      });
+    });
+  }
+
+  function renderPack() {
+    var sel = document.getElementById("pkTripSelect");
+    fillCatSelect(document.getElementById("pkAddCat"));
+    fillCatSelect(document.getElementById("pkTplAddCat"));
+    var sorted = tripsSorted();
+    sel.innerHTML = "";
+    document.getElementById("pkNoTrip").style.display = sorted.length ? "none" : "";
+    sel.parentNode.style.display = sorted.length ? "" : "none";
+    if (sorted.length && (!packTripId || !packTrip())) packTripId = activeTripId && trips.some(function (t) { return t.id === activeTripId; }) ? activeTripId : sorted[0].id;
+    sorted.forEach(function (t) {
+      var o = document.createElement("option"); o.value = t.id;
+      var p = t.packing;
+      o.textContent = t.place + " (" + formatDateRange(t) + ")" + (p && p.length ? " · " + p.filter(function (x) { return x.done; }).length + "/" + p.length : "");
+      if (t.id === packTripId) o.selected = true;
+      sel.appendChild(o);
+    });
+    var trip = packTrip();
+    var has = !!(trip && Array.isArray(trip.packing));
+    document.getElementById("pkStart").style.display = trip && !has ? "" : "none";
+    document.getElementById("pkListWrap").style.display = has ? "" : "none";
+    if (has) {
+      var items = trip.packing;
+      var done = items.filter(function (x) { return x.done; }).length;
+      document.getElementById("pkProgressText").innerHTML = "<b>" + done + " / " + items.length + "</b> 챙김";
+      document.getElementById("pkBarFill").style.width = (items.length ? Math.round(done / items.length * 100) : 0) + "%";
+      document.getElementById("pkAllSet").classList.toggle("show", items.length > 0 && done === items.length);
+      drawPackItems(document.getElementById("pkList"), items, true, function () { saveTrips(); renderPack(); });
+    }
+    document.getElementById("pkTplCount").textContent = packTpl.length + "개";
+    drawPackItems(document.getElementById("pkTplList"), packTpl, false, function () { savePackTpl(); renderPack(); });
+  }
+
+  document.getElementById("pkTripSelect").addEventListener("change", function () {
+    packTripId = this.value;
+    try { localStorage.setItem(PACK_TRIP_KEY, packTripId); } catch (e) {}
+    renderPack();
+  });
+  document.getElementById("pkFromTplBtn").addEventListener("click", function () {
+    var trip = packTrip(); if (!trip) return;
+    trip.packing = packTpl.map(function (x) { return { id: uid(), cat: x.cat, text: x.text, done: false }; });
+    saveTrips(); renderPack();
+    showToast("템플릿 " + trip.packing.length + "개 항목으로 만들었어요");
+  });
+  document.getElementById("pkEmptyBtn").addEventListener("click", function () {
+    var trip = packTrip(); if (!trip) return;
+    trip.packing = []; saveTrips(); renderPack();
+  });
+  function packAdd(list, catSel, input, save) {
+    var v = input.value.trim();
+    if (!v) { input.focus(); return; }
+    list.push({ id: uid(), cat: catSel.value, text: v, done: false });
+    input.value = "";
+    save(); renderPack();
+    input.focus();
+  }
+  document.getElementById("pkAddBtn").addEventListener("click", function () {
+    var trip = packTrip(); if (!trip || !trip.packing) return;
+    packAdd(trip.packing, document.getElementById("pkAddCat"), document.getElementById("pkAddText"), saveTrips);
+  });
+  document.getElementById("pkAddText").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("pkAddBtn").click(); }
+  });
+  document.getElementById("pkTplAddBtn").addEventListener("click", function () {
+    packAdd(packTpl, document.getElementById("pkTplAddCat"), document.getElementById("pkTplAddText"), savePackTpl);
+    packTpl.forEach(function (x) { delete x.done; });
+  });
+  document.getElementById("pkTplAddText").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("pkTplAddBtn").click(); }
+  });
+  document.getElementById("pkUncheckBtn").addEventListener("click", function () {
+    var trip = packTrip(); if (!trip || !trip.packing) return;
+    if (!confirm("체크를 전부 풀까요?")) return;
+    trip.packing.forEach(function (x) { x.done = false; });
+    saveTrips(); renderPack();
+  });
+  document.getElementById("pkToTplBtn").addEventListener("click", function () {
+    var trip = packTrip(); if (!trip || !trip.packing) return;
+    if (!confirm("지금 이 여행 리스트(" + trip.packing.length + "개)로 기본 템플릿을 바꿀까요?\n다음 여행부터 이 항목들로 시작해요.")) return;
+    packTpl = trip.packing.map(function (x) { return { id: uid(), cat: x.cat, text: x.text }; });
+    savePackTpl(); renderPack();
+    showToast("기본 템플릿을 바꿨어요");
+  });
+  document.getElementById("pkTplToggle").addEventListener("click", function () {
+    var w = document.getElementById("pkTplWrap"), open = w.style.display === "none";
+    w.style.display = open ? "" : "none";
+    this.textContent = open ? "접기" : "펼치기";
+  });
+
   // ---------- 전체 렌더 ----------
   function renderAll() {
     renderTripSelect();
@@ -1544,6 +1715,7 @@
     renderByYear();
     renderExpenseTab();
     renderBackupStatus();
+    renderPack();
   }
 
   renderAll();
@@ -1551,7 +1723,7 @@
   var savedTab = "write";
   try {
     var st = localStorage.getItem("travelActiveTab_v1");
-    if (st === "write" || st === "bytrip" || st === "byyear" || st === "expense") savedTab = st;
+    if (st === "write" || st === "bytrip" || st === "byyear" || st === "expense" || st === "pack") savedTab = st;
   } catch (e) {}
   switchTab(savedTab);
 

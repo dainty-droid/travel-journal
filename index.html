@@ -37,7 +37,7 @@
   .tabbar { display: flex; gap: 8px; }
   .tab-btn {
     flex: 1; background: var(--card2); border: none; color: var(--muted);
-    border-radius: 10px; padding: 10px; font-size: 0.88em; font-weight: 700;
+    border-radius: 10px; padding: 10px 4px; font-size: 0.88em; font-weight: 700; white-space: nowrap;
   }
   .tab-btn.active { color: var(--text); background: #1c2c3a; box-shadow: inset 0 0 0 2px var(--accent); }
   .tab-panel { display: none; }
@@ -230,6 +230,33 @@
   .viewer-img img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
   /* 휴지통 / 선택 삭제 */
+  /* 2026-11-26: 준비물 체크리스트 */
+  .pk-progress { margin: 4px 0 12px; }
+  .pk-progress-text { font-size: 0.85em; color: var(--muted); margin-bottom: 6px; }
+  .pk-progress-text b { color: var(--text); font-size: 1.1em; }
+  .pk-bar { height: 8px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .pk-bar > div { height: 100%; background: var(--ok); width: 0; transition: width .2s; }
+  .pk-cat { font-size: 0.78em; color: var(--muted); font-weight: 700; margin: 14px 0 4px; }
+  .pk-item { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+  .pk-item:last-child { border-bottom: none; }
+  .pk-check { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--text);
+    text-align: left; padding: 11px 0; font-size: 0.95em; font-family: inherit; min-width: 0; }
+  .pk-box { flex: 0 0 22px; height: 22px; border: 2px solid var(--line); border-radius: 6px; display: flex;
+    align-items: center; justify-content: center; font-size: 0.8em; color: #fff; }
+  .pk-text { overflow-wrap: anywhere; }
+  .pk-item.done .pk-box { background: var(--ok); border-color: var(--ok); }
+  .pk-item.done .pk-text { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--muted); }
+  .pk-mini { background: none; border: none; color: var(--muted); font-size: 0.95em; padding: 8px 6px; flex: 0 0 auto; }
+  .pk-add { display: flex; gap: 6px; margin-top: 12px; }
+  .pk-add select, .pk-add input { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 10px 8px; font-size: 0.9em; font-family: inherit; min-width: 0; }
+  .pk-add select { flex: 0 0 auto; max-width: 38%; }
+  .pk-add input { flex: 1; }
+  .pk-add button { flex: 0 0 auto; }
+  .pk-btns { display: flex; gap: 8px; margin-top: 12px; }
+  .pk-btns button { flex: 1; }
+  .pk-allset { text-align: center; color: var(--ok); font-weight: 700; margin: 8px 0 0; display: none; }
+  .pk-allset.show { display: block; }
   .card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .card-title-row h2 { margin: 0; }
   .trash-btn {
@@ -333,6 +360,7 @@
     <button class="tab-btn" data-tab="bytrip" type="button">여행별</button>
     <button class="tab-btn" data-tab="byyear" type="button">연도별</button>
     <button class="tab-btn" data-tab="expense" type="button">경비</button>
+    <button class="tab-btn" data-tab="pack" type="button">준비물</button>
   </div>
 </header>
 
@@ -454,6 +482,59 @@
   <h2>여행별 경비</h2>
   <div class="sum-line">눌러서 그 여행 열기 · <span class="exp-tag none">경비 없음</span> <span class="exp-tag flightonly">항공만</span> 은 채울 곳</div>
   <div id="expTrips"></div>
+</div>
+</section>
+
+<!-- 2026-11-26: 준비물 체크리스트 (기본 템플릿 + 여행별 리스트) -->
+<section id="tab-pack" class="tab-panel">
+<div class="card">
+  <h2>🧳 준비물</h2>
+  <div class="field">
+    <label>어느 여행</label>
+    <select id="pkTripSelect"></select>
+  </div>
+  <div id="pkNoTrip" class="empty-note" style="display:none;">아직 여행이 없어요. 기록 탭에서 "+ 새 여행"으로 먼저 추가해줘.</div>
+  <div id="pkStart" style="display:none;">
+    <div class="empty-note">이 여행의 준비물 리스트가 아직 없어요</div>
+    <div class="pk-btns">
+      <button type="button" class="primary" id="pkFromTplBtn">📋 기본 템플릿으로 만들기</button>
+    </div>
+    <div class="pk-btns">
+      <button type="button" class="secondary" id="pkEmptyBtn">빈 리스트로 시작</button>
+    </div>
+  </div>
+  <div id="pkListWrap" style="display:none;">
+    <div class="pk-progress">
+      <div class="pk-progress-text" id="pkProgressText"></div>
+      <div class="pk-bar"><div id="pkBarFill"></div></div>
+    </div>
+    <div class="pk-allset" id="pkAllSet">🎉 다 챙겼다! 출발만 하면 돼</div>
+    <div id="pkList"></div>
+    <div class="pk-add">
+      <select id="pkAddCat"></select>
+      <input type="text" id="pkAddText" placeholder="항목 추가">
+      <button type="button" class="secondary" id="pkAddBtn">추가</button>
+    </div>
+    <div class="pk-btns">
+      <button type="button" class="secondary" id="pkUncheckBtn">체크 전부 풀기</button>
+      <button type="button" class="secondary" id="pkToTplBtn">템플릿으로 저장</button>
+    </div>
+  </div>
+</div>
+<div class="card">
+  <div class="card-title-row">
+    <h2>📋 기본 템플릿</h2>
+    <button type="button" class="link" id="pkTplToggle">펼치기</button>
+  </div>
+  <div class="sum-line">새 여행 리스트를 만들 때 복사되는 단골 항목 · <span id="pkTplCount"></span></div>
+  <div id="pkTplWrap" style="display:none;">
+    <div id="pkTplList"></div>
+    <div class="pk-add">
+      <select id="pkTplAddCat"></select>
+      <input type="text" id="pkTplAddText" placeholder="템플릿에 항목 추가">
+      <button type="button" class="secondary" id="pkTplAddBtn">추가</button>
+    </div>
+  </div>
 </div>
 </section>
 
